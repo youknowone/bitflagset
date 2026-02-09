@@ -1,0 +1,127 @@
+name: Bench Readme
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "README.md"
+      - "benches/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/update_readme_bench.sh"
+      - ".github/workflows/bench-readme.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vs-bitvec-readme:
+    name: vs_bitvec + README check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run vs_bitvec benchmarks
+        run: cargo bench --bench vs_bitvec --locked
+
+      - name: Check README benchmark tables
+        id: readme_check
+        run: |
+          set +e
+          output="$(scripts/update_readme_bench.sh --check 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          {
+            echo "output<<EOF"
+            printf '%s\n' "$output"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Comment on PR when README tables are stale
+        if: github.event_name == 'pull_request' && steps.readme_check.outputs.status != '0'
+        uses: actions/github-script@v7
+        env:
+          CHECK_OUTPUT: ${{ steps.readme_check.outputs.output }}
+        with:
+          script: |
+            const marker = "<!-- bench-readme-check -->";
+            const body = `${marker}
+            ⚠️ README benchmark tables are stale.
+
+            Run the following locally and commit the updated README:
+            \`\`\`bash
+            cargo bench --bench vs_bitvec
+            scripts/update_readme_bench.sh
+            \`\`\`
+
+            Check output:
+            \`\`\`
+            ${process.env.CHECK_OUTPUT || "no output"}
+            \`\`\`
+            `;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 }
+            );
+            const existing = comments.find(
+              (comment) =>
+                comment.user?.type === "Bot" &&
+                typeof comment.body === "string" &&
+                comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+  vs-bitflags-smoke:
+    name: vs_bitflags benchmark smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.86.0
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run vs_bitflags benchmarks
+        run: cargo bench --bench vs_bitflags --locked -- --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2

@@ -1,0 +1,50 @@
+[package]
+name = "bitflagset"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.86.0"
+description = "Type-safe bitsets with Set-like ergonomics"
+license = "MIT"
+repository = "https://github.com/youknowone/bitflagset"
+
+[lints.clippy]
+missing_safety_doc = "deny"
+undocumented_unsafe_blocks = "allow"
+unnecessary_safety_comment = "deny"
+unnecessary_safety_doc = "deny"
+
+[lints.rust]
+unexpected_cfgs = { level = "forbid" }
+
+[features]
+default = ["std"]
+std = ["alloc", "num-traits/std", "num-integer/std"]
+alloc = []
+bitvec = ["dep:bitvec"]
+bitflags = ["dep:bitflags"]
+
+[dependencies]
+bitflags = { version = "2.6", optional = true }
+bitvec = { version = "1.0.1", optional = true }
+num-integer = { version = "0.1.44", default-features = false }
+num-traits = { version = "0.2.15", default-features = false }
+radium = "0.7"
+
+[dev-dependencies]
+bitflags = "2.6"
+bitvec = "1.0.1"
+criterion = "0.5"
+proptest = "1.4.0"
+rand = "0.8.5"
+
+[[bench]]
+name = "vs_bitvec"
+harness = false
+
+[[bench]]
+name = "atomic"
+harness = false
+
+[[bench]]
+name = "vs_bitflags"
+harness = false
