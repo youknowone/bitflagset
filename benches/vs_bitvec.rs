@@ -137,6 +137,23 @@ macro_rules! bench_fixed {
                 b.iter(|| black_box(&bv_a).iter_ones().count())
             });
 
+            // drain
+            g.bench_function("ours/drain", |b| {
+                b.iter(|| {
+                    let mut s = ours_a.clone();
+                    black_box(s.drain().count());
+                    debug_assert!(s.is_empty());
+                })
+            });
+            g.bench_function("bitvec/drain_manual", |b| {
+                b.iter(|| {
+                    let mut s = bv_a;
+                    let count = s.iter_ones().count();
+                    s.fill(false);
+                    black_box(count);
+                })
+            });
+
             g.finish();
         }
     };
@@ -235,6 +252,23 @@ fn bench_boxed(c: &mut Criterion) {
     });
     g.bench_function("bitvec/iter_ones", |b| {
         b.iter(|| black_box(&bv_a).iter_ones().count())
+    });
+
+    // drain
+    g.bench_function("ours/drain", |b| {
+        b.iter(|| {
+            let mut s = ours_a.clone();
+            black_box(s.drain().count());
+            debug_assert!(s.is_empty());
+        })
+    });
+    g.bench_function("bitvec/drain_manual", |b| {
+        b.iter(|| {
+            let mut s = bv_a.clone();
+            let count = s.iter_ones().count();
+            s.fill(false);
+            black_box(count);
+        })
     });
 
     g.finish();

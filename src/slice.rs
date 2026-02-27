@@ -72,6 +72,85 @@ impl<T: PrimInt + BitAndAssign, V: TryFrom<usize>> ExactSizeIterator for BitSlic
 
 impl<T: PrimInt + BitAndAssign, V: TryFrom<usize>> FusedIterator for BitSliceIter<'_, T, V> {}
 
+/// Draining iterator over set bit positions in a `BitSlice`.
+///
+/// Each word is consumed and zeroed in-place as iteration advances.
+/// Dropping the iterator clears any remaining words.
+pub struct Drain<'a, T: PrimInt, V> {
+    words: &'a mut [T],
+    word_idx: usize,
+    current: PrimBitSetIter<T, usize>,
+    _marker: PhantomData<V>,
+}
+
+impl<T: PrimInt + BitAndAssign, V> Drain<'_, T, V> {
+    #[inline]
+    fn remaining_len(&self) -> usize {
+        self.current.len()
+            + self.words[self.word_idx..]
+                .iter()
+                .map(|w| w.count_ones() as usize)
+                .sum::<usize>()
+    }
+}
+
+impl<T: PrimInt + BitAndAssign, V: TryFrom<usize>> Iterator for Drain<'_, T, V> {
+    type Item = V;
+
+    fn next(&mut self) -> Option<V> {
+        let bits_per = core::mem::size_of::<T>() * 8;
+        loop {
+            if let Some(pos) = self.current.next() {
+                let idx = (self.word_idx - 1) * bits_per + pos;
+                let converted = V::try_from(idx);
+                debug_assert!(converted.is_ok());
+                match converted {
+                    Ok(value) => return Some(value),
+                    Err(_) => unsafe { core::hint::unreachable_unchecked() },
+                }
+            }
+            if self.word_idx >= self.words.len() {
+                return None;
+            }
+            self.current = PrimBitSetIter::from_raw(self.words[self.word_idx]);
+            self.words[self.word_idx] = T::zero();
+            self.word_idx += 1;
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.remaining_len();
+        (len, Some(len))
+    }
+
+    #[inline]
+    fn count(self) -> usize
+    where
+        Self: Sized,
+    {
+        self.remaining_len()
+    }
+}
+
+impl<T: PrimInt + BitAndAssign, V: TryFrom<usize>> ExactSizeIterator for Drain<'_, T, V> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.remaining_len()
+    }
+}
+
+impl<T: PrimInt + BitAndAssign, V: TryFrom<usize>> FusedIterator for Drain<'_, T, V> {}
+
+impl<T: PrimInt, V> Drop for Drain<'_, T, V> {
+    fn drop(&mut self) {
+        // Clear any words not yet consumed
+        for w in &mut self.words[self.word_idx..] {
+            *w = T::zero();
+        }
+    }
+}
+
 /// Unsized shared base for all bitset types. Wraps a raw `[T]` primitive slice.
 ///
 /// All operations use direct primitive bit manipulation (count_ones, bit masking, etc.),
@@ -301,6 +380,20 @@ impl<T: PrimInt, V> BitSlice<T, V> {
     #[inline]
     pub fn clear(&mut self) {
         self.1.fill(T::zero());
+    }
+
+    #[inline]
+    pub fn drain(&mut self) -> Drain<'_, T, V>
+    where
+        T: BitAndAssign,
+        V: TryFrom<usize>,
+    {
+        Drain {
+            words: &mut self.1,
+            word_idx: 0,
+            current: PrimBitSetIter::empty(),
+            _marker: PhantomData,
+        }
     }
 
     pub fn retain(&mut self, mut f: impl FnMut(V) -> bool)

@@ -134,6 +134,7 @@ where
 /// ```
 #[macro_export]
 macro_rules! bitflag {
+    // With explicit discriminants
     (
         $(#[$outer:meta])*
         $vis:vis enum $name:ident {
@@ -141,10 +142,34 @@ macro_rules! bitflag {
             $(,)?
         }
     ) => {
+        $crate::bitflag!(@impl $(#[$outer])* $vis enum $name {
+            $($(#[$inner])* $variant = $value),*
+        });
+    };
+
+    // Without explicit discriminants (auto-assigned 0, 1, 2, ...)
+    (
+        $(#[$outer:meta])*
+        $vis:vis enum $name:ident {
+            $($(#[$inner:meta])* $variant:ident),*
+            $(,)?
+        }
+    ) => {
+        $crate::bitflag!(@impl $(#[$outer])* $vis enum $name {
+            $($(#[$inner])* $variant),*
+        });
+    };
+
+    (@impl
+        $(#[$outer:meta])*
+        $vis:vis enum $name:ident {
+            $($(#[$inner:meta])* $variant:ident $(= $value:expr)?),*
+        }
+    ) => {
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         $(#[$outer])*
         $vis enum $name {
-            $($(#[$inner])* $variant = $value),*
+            $($(#[$inner])* $variant $(= $value)?),*
         }
 
         const _: () = assert!(
@@ -184,7 +209,6 @@ macro_rules! bitflag {
             };
         }
     };
-
 }
 
 #[doc(hidden)]
@@ -437,6 +461,7 @@ macro_rules! bitflagset {
             }
         }
 
+        #[allow(dead_code)]
         impl $name {
             #[inline]
             pub const fn new() -> Self {
@@ -2124,6 +2149,32 @@ mod bitflag_tests {
         assert_eq!(ColorSet::from_bits_truncate(0xFF), ColorSet::all());
         let unchecked = unsafe { ColorSet::from_bits_unchecked(0b001) };
         assert!(unchecked.contains(&Color::Red));
+    }
+
+    #[test]
+    fn auto_discriminants() {
+        crate::bitflag! {
+            #[derive(Debug)]
+            #[repr(u8)]
+            enum Shape {
+                Circle,
+                Square,
+                Triangle,
+            }
+        }
+        assert_eq!(Shape::Circle as u8, 0);
+        assert_eq!(Shape::Square as u8, 1);
+        assert_eq!(Shape::Triangle as u8, 2);
+        assert_eq!(Shape::FLAGS.len(), 3);
+        assert_eq!(Shape::FLAGS[0].name(), "Circle");
+
+        crate::bitflagset!(struct ShapeSet(u8) : Shape);
+        let mut set = ShapeSet::from_element(Shape::Circle);
+        set.insert(Shape::Triangle);
+        assert!(set.contains(&Shape::Circle));
+        assert!(!set.contains(&Shape::Square));
+        assert!(set.contains(&Shape::Triangle));
+        assert_eq!(set.len(), 2);
     }
 }
 

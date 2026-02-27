@@ -1497,6 +1497,32 @@ mod tests {
     }
 
     #[test]
+    fn test_drain_slice() {
+        let mut bs = BitSet::<[u64; 2], usize>::new();
+        bs.insert(1);
+        bs.insert(65);
+        bs.insert(100);
+
+        let items: Vec<usize> = bs.drain().collect();
+        assert_eq!(items, vec![1, 65, 100]);
+        assert!(bs.is_empty());
+    }
+
+    #[test]
+    fn test_drain_drop_clears() {
+        let mut bs = BitSet::<[u64; 2], usize>::new();
+        bs.insert(1);
+        bs.insert(65);
+        bs.insert(100);
+
+        // Take only the first element, then drop
+        let mut drain = bs.drain();
+        assert_eq!(drain.next(), Some(1));
+        drop(drain);
+        assert!(bs.is_empty());
+    }
+
+    #[test]
     fn test_append() {
         let mut a = BitSet::<[u64; 2], usize>::new();
         a.insert(1);
