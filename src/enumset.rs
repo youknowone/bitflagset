@@ -2256,6 +2256,91 @@ mod bitflags_enum_tests {
 }
 
 #[cfg(test)]
+mod derive_bitflag_tests {
+    use super::BitFlag;
+
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, crate::BitFlag)]
+    #[repr(u8)]
+    enum Shape {
+        Circle,
+        Square,
+        Triangle,
+    }
+
+    crate::bitflagset!(struct ShapeSet(u8) : Shape);
+
+    #[test]
+    fn derive_flags_list() {
+        assert_eq!(Shape::FLAGS.len(), 3);
+        assert_eq!(Shape::FLAGS[0].name(), "Circle");
+        assert_eq!(Shape::FLAGS[1].name(), "Square");
+        assert_eq!(Shape::FLAGS[2].name(), "Triangle");
+    }
+
+    #[test]
+    fn derive_as_u8() {
+        assert_eq!(Shape::Circle.as_u8(), 0);
+        assert_eq!(Shape::Square.as_u8(), 1);
+        assert_eq!(Shape::Triangle.as_u8(), 2);
+    }
+
+    #[test]
+    fn derive_mask() {
+        assert_eq!(Shape::Circle.mask(), 0b001u8);
+        assert_eq!(Shape::Square.mask(), 0b010u8);
+        assert_eq!(Shape::Triangle.mask(), 0b100u8);
+    }
+
+    #[test]
+    fn derive_try_from() {
+        assert_eq!(Shape::try_from(0), Ok(Shape::Circle));
+        assert_eq!(Shape::try_from(1), Ok(Shape::Square));
+        assert_eq!(Shape::try_from(2), Ok(Shape::Triangle));
+        assert!(Shape::try_from(3).is_err());
+    }
+
+    #[test]
+    fn derive_from_for_u8() {
+        assert_eq!(u8::from(Shape::Circle), 0);
+        assert_eq!(u8::from(Shape::Square), 1);
+        assert_eq!(u8::from(Shape::Triangle), 2);
+    }
+
+    #[test]
+    fn derive_with_bitflagset() {
+        let mut set = ShapeSet::from_slice(&[Shape::Circle, Shape::Triangle]);
+        assert!(set.contains(&Shape::Circle));
+        assert!(!set.contains(&Shape::Square));
+        set.insert(Shape::Square);
+        assert_eq!(set.len(), 3);
+    }
+
+    #[test]
+    fn derive_max_value() {
+        assert_eq!(Shape::MAX_VALUE, 2);
+    }
+
+    // explicit discriminants
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, crate::BitFlag)]
+    #[repr(u8)]
+    enum Sparse {
+        A = 0,
+        B = 5,
+        C = 10,
+    }
+
+    #[test]
+    fn derive_sparse_discriminants() {
+        assert_eq!(Sparse::A.as_u8(), 0);
+        assert_eq!(Sparse::B.as_u8(), 5);
+        assert_eq!(Sparse::C.as_u8(), 10);
+        assert_eq!(Sparse::MAX_VALUE, 10);
+        assert_eq!(Sparse::try_from(5), Ok(Sparse::B));
+        assert!(Sparse::try_from(3).is_err());
+    }
+}
+
+#[cfg(test)]
 mod bitflags_mode_tests {
     extern crate alloc;
     use alloc::{format, vec, vec::Vec};

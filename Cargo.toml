@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "bitflagset-derive"]
+
 [package]
 name = "bitflagset"
 version = "0.0.1"
@@ -24,6 +27,7 @@ bitvec = ["dep:bitvec"]
 bitflags = ["dep:bitflags"]
 
 [dependencies]
+bitflagset-derive = { path = "bitflagset-derive" }
 bitflags = { version = "2.6", optional = true }
 bitvec = { version = "1.0.1", optional = true }
 num-integer = { version = "0.1.44", default-features = false }

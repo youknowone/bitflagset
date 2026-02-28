@@ -1,0 +1,15 @@
+[package]
+name = "bitflagset-derive"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.86.0"
+description = "Derive macro for bitflagset BitFlag trait"
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
