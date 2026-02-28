@@ -2751,7 +2751,10 @@ mod atomic_bitflagset_tests {
         assert!(unchecked.contains(&Color::Red));
         assert!(AtomicColorSet::from_bits(0b001).is_some());
         assert!(AtomicColorSet::from_bits(1u8 << 7).is_none());
-        assert_eq!(AtomicColorSet::from_bits_truncate(0xFF).bits(), AtomicColorSet::all().bits());
+        assert_eq!(
+            AtomicColorSet::from_bits_truncate(0xFF).bits(),
+            AtomicColorSet::all().bits()
+        );
 
         let all = AtomicColorSet::all();
         assert!(all.is_all());
@@ -2795,7 +2798,10 @@ mod atomic_bitflagset_tests {
     fn enum_form_swap_bits() {
         let atomic = AtomicColorSet::new();
         atomic.insert(Color::Green);
-        assert_eq!(ColorSet::from(&atomic), ColorSet::from_element(Color::Green));
+        assert_eq!(
+            ColorSet::from(&atomic),
+            ColorSet::from_element(Color::Green)
+        );
 
         let mut raw = ColorSet::from_element(Color::Red).bits();
         atomic.swap_bits(&mut raw);

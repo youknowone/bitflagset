@@ -900,6 +900,77 @@ impl<'a, T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize
     }
 }
 
+impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize> IntoIterator
+    for BitSet<[T; N], V>
+{
+    type Item = V;
+    type IntoIter = ArrayBitSetIntoIter<T, V, N>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        ArrayBitSetIntoIter {
+            arr: self.0,
+            word_idx: 0,
+            current: PrimBitSetIter::empty(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+/// Owned iterator over set bit positions in a `BitSet<[T; N], V>`.
+pub struct ArrayBitSetIntoIter<T: PrimInt, V, const N: usize> {
+    arr: [T; N],
+    word_idx: usize,
+    current: PrimBitSetIter<T, usize>,
+    _marker: PhantomData<V>,
+}
+
+impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize> Iterator
+    for ArrayBitSetIntoIter<T, V, N>
+{
+    type Item = V;
+
+    fn next(&mut self) -> Option<V> {
+        let bits_per = core::mem::size_of::<T>() * 8;
+        loop {
+            if let Some(pos) = self.current.next() {
+                let idx = (self.word_idx - 1) * bits_per + pos;
+                let converted = V::try_from(idx);
+                debug_assert!(converted.is_ok());
+                match converted {
+                    Ok(value) => return Some(value),
+                    Err(_) => unsafe { core::hint::unreachable_unchecked() },
+                }
+            }
+            if self.word_idx >= N {
+                return None;
+            }
+            self.current = PrimBitSetIter::from_raw(self.arr[self.word_idx]);
+            self.word_idx += 1;
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining: usize = self.current.len()
+            + self.arr[self.word_idx..]
+                .iter()
+                .map(|w| w.count_ones() as usize)
+                .sum::<usize>();
+        (remaining, Some(remaining))
+    }
+}
+
+impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize> ExactSizeIterator
+    for ArrayBitSetIntoIter<T, V, N>
+{
+}
+
+impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize>
+    core::iter::FusedIterator for ArrayBitSetIntoIter<T, V, N>
+{
+}
+
 impl<T: PrimStore, V: AsPrimitive<usize>, const N: usize> core::iter::Extend<V>
     for BitSet<[T; N], V>
 {
@@ -1602,5 +1673,27 @@ mod tests {
 
         let sym_diff: Vec<usize> = a.symmetric_difference(&b).collect();
         assert_eq!(sym_diff, vec![1, 10]);
+    }
+
+    #[test]
+    fn test_array_into_iter_owned() {
+        let mut bs = BitSet::<[u64; 2], usize>::new();
+        bs.insert(5);
+        bs.insert(70);
+        bs.insert(100);
+        let items: Vec<usize> = bs.into_iter().collect();
+        assert_eq!(items, vec![5, 70, 100]);
+    }
+
+    #[test]
+    fn test_array_into_iter_for_loop() {
+        let mut bs = BitSet::<[u64; 2], usize>::new();
+        bs.insert(3);
+        bs.insert(64);
+        let mut result = Vec::new();
+        for item in bs {
+            result.push(item);
+        }
+        assert_eq!(result, vec![3, 64]);
     }
 }
