@@ -2,6 +2,7 @@ use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use num_traits::{AsPrimitive, PrimInt, Zero};
+use ref_cast::RefCast;
 
 use super::slice::BitSlice;
 
@@ -95,8 +96,8 @@ mod sealed {
 pub use sealed::PrimStore;
 
 #[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct BitSet<A, V>(pub(crate) A, pub(crate) PhantomData<V>);
+#[derive(Clone, Copy, RefCast)]
+pub struct BitSet<A, V>(pub(crate) A, #[trivial] pub(crate) PhantomData<V>);
 
 impl<A: PrimStore, V> Deref for BitSet<A, V> {
     type Target = BitSlice<A, V>;
@@ -908,68 +909,12 @@ impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize> In
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        ArrayBitSetIntoIter {
-            arr: self.0,
-            word_idx: 0,
-            current: PrimBitSetIter::empty(),
-            _marker: PhantomData,
-        }
+        super::slice::WordSetIter::new(self.0)
     }
 }
 
 /// Owned iterator over set bit positions in a `BitSet<[T; N], V>`.
-pub struct ArrayBitSetIntoIter<T: PrimInt, V, const N: usize> {
-    arr: [T; N],
-    word_idx: usize,
-    current: PrimBitSetIter<T, usize>,
-    _marker: PhantomData<V>,
-}
-
-impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize> Iterator
-    for ArrayBitSetIntoIter<T, V, N>
-{
-    type Item = V;
-
-    fn next(&mut self) -> Option<V> {
-        let bits_per = core::mem::size_of::<T>() * 8;
-        loop {
-            if let Some(pos) = self.current.next() {
-                let idx = (self.word_idx - 1) * bits_per + pos;
-                let converted = V::try_from(idx);
-                debug_assert!(converted.is_ok());
-                match converted {
-                    Ok(value) => return Some(value),
-                    Err(_) => unsafe { core::hint::unreachable_unchecked() },
-                }
-            }
-            if self.word_idx >= N {
-                return None;
-            }
-            self.current = PrimBitSetIter::from_raw(self.arr[self.word_idx]);
-            self.word_idx += 1;
-        }
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining: usize = self.current.len()
-            + self.arr[self.word_idx..]
-                .iter()
-                .map(|w| w.count_ones() as usize)
-                .sum::<usize>();
-        (remaining, Some(remaining))
-    }
-}
-
-impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize> ExactSizeIterator
-    for ArrayBitSetIntoIter<T, V, N>
-{
-}
-
-impl<T: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>, const N: usize>
-    core::iter::FusedIterator for ArrayBitSetIntoIter<T, V, N>
-{
-}
+pub type ArrayBitSetIntoIter<T, V, const N: usize> = super::slice::WordSetIter<[T; N], T, V>;
 
 impl<T: PrimStore, V: AsPrimitive<usize>, const N: usize> core::iter::Extend<V>
     for BitSet<[T; N], V>

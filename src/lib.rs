@@ -19,7 +19,8 @@ pub use atomic::*;
 #[cfg(feature = "alloc")]
 pub use atomic_boxed::*;
 pub use atomic_slice::*;
-pub use bitflagset_derive::BitFlag;
+#[cfg(feature = "derive")]
+pub use bitflagset_derive::{BitFlag, BitFlagSet};
 pub use bitset::*;
 #[cfg(feature = "alloc")]
 pub use boxed::*;
@@ -31,4 +32,5 @@ pub mod __private {
     #[cfg(feature = "bitflags")]
     pub use bitflags;
     pub use radium;
+    pub use ref_cast;
 }

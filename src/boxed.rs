@@ -90,6 +90,19 @@ impl<'a, A: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>> IntoIterator
     }
 }
 
+impl<A: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>> IntoIterator for BoxedBitSet<A, V> {
+    type Item = V;
+    type IntoIter = BoxedBitSetIntoIter<A, V>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        super::slice::WordSetIter::new(self.0)
+    }
+}
+
+/// Owned iterator over set bit positions in a `BoxedBitSet<A, V>`.
+pub type BoxedBitSetIntoIter<T, V> = super::slice::WordSetIter<Box<[T]>, T, V>;
+
 impl<A: PrimInt, V> core::ops::BitOr for BoxedBitSet<A, V> {
     type Output = Self;
     #[inline]

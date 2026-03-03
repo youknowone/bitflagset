@@ -134,7 +134,6 @@ where
 /// ```
 #[macro_export]
 macro_rules! bitflag {
-    // With explicit discriminants
     (
         $(#[$outer:meta])*
         $vis:vis enum $name:ident {
@@ -147,7 +146,6 @@ macro_rules! bitflag {
         });
     };
 
-    // Without explicit discriminants (auto-assigned 0, 1, 2, ...)
     (
         $(#[$outer:meta])*
         $vis:vis enum $name:ident {
@@ -332,7 +330,6 @@ macro_rules! __bitflagset_impl_flags {
 /// implements `bitflags::Flags`.
 #[macro_export]
 macro_rules! bitflagset {
-    // Shared operator impls
     (@ops $name:ident, $repr:ty) => {
         impl core::ops::Sub<$name> for $name {
             type Output = $name;
@@ -423,14 +420,17 @@ macro_rules! bitflagset {
         }
     };
 
-    // Enum form: enum-backed
     ($vis:vis struct $name:ident($repr:ty) : $typ:ty) => {
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        $vis struct $name($crate::BitSet<$repr, u8>);
+        $vis struct $name($repr);
 
+        $crate::bitflagset!(@__derive_impls $name, $repr, $typ);
+    };
+
+    (@__derive_impls $name:ident, $repr:ty, $typ:ty) => {
         const _: () = assert!(
             <$typ as $crate::BitFlag>::MAX_VALUE < <$repr>::BITS as u8,
-            "bitflagset! enum discriminant exceeds storage width"
+            "bitflagset element discriminant exceeds storage width"
         );
 
         impl Default for $name {
@@ -465,7 +465,7 @@ macro_rules! bitflagset {
         impl $name {
             #[inline]
             pub const fn new() -> Self {
-                Self($crate::BitSet::<$repr, u8>::from_bits(0))
+                Self(0)
             }
             #[inline]
             pub const fn empty() -> Self {
@@ -473,15 +473,15 @@ macro_rules! bitflagset {
             }
             #[inline]
             pub const fn from_bits_retain(raw: $repr) -> Self {
-                Self($crate::BitSet::<$repr, u8>::from_bits(raw))
+                Self(raw)
             }
             #[inline]
             pub const fn bits(&self) -> $repr {
-                self.0.bits()
+                self.0
             }
             #[inline]
             pub const unsafe fn from_bits_unchecked(bits: $repr) -> Self {
-                Self($crate::BitSet::<$repr, u8>::from_bits(bits))
+                Self(bits)
             }
             #[inline]
             pub fn from_bits(bits: $repr) -> Option<Self>
@@ -558,29 +558,29 @@ macro_rules! bitflagset {
             pub fn toggle(&mut self, value: $typ) {
                 let shift = value as u8;
                 debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
-                self.0.toggle(shift);
+                <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).toggle(shift);
             }
             #[inline]
             pub fn set(&mut self, value: $typ, enabled: bool) {
                 let shift = value as u8;
                 debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
-                self.0.set(shift, enabled);
+                <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).set(shift, enabled);
             }
             #[inline]
             pub fn insert(&mut self, value: $typ) -> bool {
                 let shift = value as u8;
                 debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
-                self.0.insert(shift)
+                <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).insert(shift)
             }
             #[inline]
             pub fn remove(&mut self, value: $typ) -> bool {
                 let shift = value as u8;
                 debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
-                self.0.remove(shift)
+                <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).remove(shift)
             }
             #[inline]
             pub fn clear(&mut self) {
-                self.0 = $crate::BitSet::<$repr, u8>::from_bits(0);
+                self.0 = 0;
             }
             #[inline]
             pub const fn is_subset(&self, other: &Self) -> bool {
@@ -639,7 +639,7 @@ macro_rules! bitflagset {
                     let mask = (1 as $repr) << idx;
                     bits &= !mask;
                     if let Ok(value) = idx.try_into() {
-                        self.0 = $crate::BitSet::<$repr, u8>::from_bits(self.bits() & !mask);
+                        self.0 &= !mask;
                         return Some(value);
                     }
                 }
@@ -656,7 +656,7 @@ macro_rules! bitflagset {
                     let mask = (1 as $repr) << idx;
                     bits &= !mask;
                     if let Ok(value) = idx.try_into() {
-                        self.0 = $crate::BitSet::<$repr, u8>::from_bits(self.bits() & !mask);
+                        self.0 &= !mask;
                         return Some(value);
                     }
                 }
@@ -679,7 +679,7 @@ macro_rules! bitflagset {
                         }
                     }
                 }
-                self.0 = $crate::BitSet::<$repr, u8>::from_bits(raw);
+                self.0 = raw;
             }
             #[inline]
             pub fn iter(&self) -> $crate::PrimBitSetIter<$repr, $typ> {
@@ -850,7 +850,6 @@ macro_rules! bitflagset {
         $crate::__bitflagset_impl_flags!($name, $repr, bitflag: $typ);
     };
 
-    // Position form: bitflags-compatible (no enum)
     ($vis:vis struct $name:ident($repr:ty) {
         $($(#[$inner:meta])* const $flag:ident = $value:expr;)*
     }) => {
@@ -873,7 +872,6 @@ macro_rules! bitflagset {
 
         #[allow(dead_code, non_upper_case_globals)]
         impl $name {
-            // Position constants (element values, not shifted masks)
             $(
                 $(#[$inner])*
                 pub const $flag: u8 = $value;
@@ -2255,7 +2253,7 @@ mod bitflags_enum_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "derive"))]
 mod derive_bitflag_tests {
     use super::BitFlag;
 
@@ -2337,6 +2335,112 @@ mod derive_bitflag_tests {
         assert_eq!(Sparse::MAX_VALUE, 10);
         assert_eq!(Sparse::try_from(5), Ok(Sparse::B));
         assert!(Sparse::try_from(3).is_err());
+    }
+}
+
+#[cfg(all(test, feature = "derive"))]
+mod attr_macro_tests {
+    extern crate alloc;
+    use super::BitFlag;
+    use alloc::{format, vec, vec::Vec};
+
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, crate::BitFlag)]
+    #[repr(u8)]
+    pub enum Color {
+        Red,
+        Green,
+        Blue,
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, crate::BitFlagSet)]
+    #[bitflagset(element = Color)]
+    pub struct ColorSet(u8);
+
+    #[test]
+    fn bitflagset_basics() {
+        let mut set = ColorSet::from_slice(&[Color::Red, Color::Blue]);
+        assert!(set.contains(&Color::Red));
+        assert!(!set.contains(&Color::Green));
+        assert!(set.contains(&Color::Blue));
+        assert_eq!(set.len(), 2);
+
+        set.insert(Color::Green);
+        assert_eq!(set.len(), 3);
+        assert!(set.is_all());
+    }
+
+    #[test]
+    fn bitflagset_operators() {
+        let a = ColorSet::from_element(Color::Red);
+        let b = ColorSet::from_element(Color::Blue);
+        let union = a | b;
+        assert!(union.contains(&Color::Red));
+        assert!(union.contains(&Color::Blue));
+        assert!(!union.contains(&Color::Green));
+
+        let intersection = union & a;
+        assert_eq!(intersection, a);
+
+        let diff = union - a;
+        assert_eq!(diff, b);
+    }
+
+    #[test]
+    fn bitflagset_iter() {
+        let set = ColorSet::from_slice(&[Color::Red, Color::Blue]);
+        let items: Vec<Color> = set.into_iter().collect();
+        assert_eq!(items, vec![Color::Red, Color::Blue]);
+    }
+
+    #[test]
+    fn bitflagset_from_iter() {
+        let set: ColorSet = [Color::Red, Color::Green].into_iter().collect();
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&Color::Red));
+        assert!(set.contains(&Color::Green));
+    }
+
+    #[test]
+    fn bitflagset_debug() {
+        let set = ColorSet::from_element(Color::Red);
+        let dbg = format!("{:?}", set);
+        assert!(dbg.contains("ColorSet"));
+        assert!(dbg.contains("Red"));
+    }
+
+    #[test]
+    fn bitflagset_default() {
+        let set = ColorSet::default();
+        assert!(set.is_empty());
+    }
+
+    // Test with explicit discriminants
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, crate::BitFlag)]
+    #[repr(u8)]
+    pub enum Priority {
+        Low = 0,
+        Medium = 3,
+        High = 7,
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, crate::BitFlagSet)]
+    #[bitflagset(element = Priority)]
+    pub struct PrioritySet(u8);
+
+    #[test]
+    fn attr_sparse_discriminants() {
+        assert_eq!(Priority::Low.as_u8(), 0);
+        assert_eq!(Priority::Medium.as_u8(), 3);
+        assert_eq!(Priority::High.as_u8(), 7);
+        assert_eq!(Priority::MAX_VALUE, 7);
+
+        let mut set = PrioritySet::empty();
+        set.insert(Priority::Low);
+        set.insert(Priority::High);
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&Priority::Low));
+        assert!(set.contains(&Priority::High));
+        assert!(!set.contains(&Priority::Medium));
     }
 }
 

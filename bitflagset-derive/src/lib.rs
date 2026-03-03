@@ -2,14 +2,10 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
 
-/// Derive the `BitFlag` trait for a `#[repr(u8)]` enum.
+/// Derive alternative to [`bitflagset::bitflag!`] for `#[repr(u8)]` enums.
 ///
-/// This generates:
-/// - `From<EnumName> for u8`
-/// - `TryFrom<u8> for EnumName`
-/// - `impl BitFlag for EnumName`
-///
-/// The enum must have `#[repr(u8)]` and all variants must be unit variants.
+/// Generates `From<Enum> for u8`, `TryFrom<u8> for Enum`, and `impl BitFlag`.
+/// Useful for tools like cbindgen that cannot expand `macro_rules!` invocations.
 ///
 /// ```ignore
 /// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, BitFlag)]
@@ -107,5 +103,83 @@ fn impl_bitflag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 max
             };
         }
+    })
+}
+
+/// Derive alternative to the enum form of [`bitflagset::bitflagset!`].
+///
+/// Useful for tools like cbindgen that cannot expand `macro_rules!` invocations.
+/// The struct must be a tuple struct with a single primitive field.
+///
+/// ```ignore
+/// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, BitFlagSet)]
+/// #[bitflagset(element = Color)]
+/// struct ColorSet(u8);
+/// ```
+#[proc_macro_derive(BitFlagSet, attributes(bitflagset))]
+pub fn derive_bitflagset(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    match impl_bitflagset(&input) {
+        Ok(ts) => ts.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+struct BitFlagSetArgs {
+    element: syn::Path,
+}
+
+fn parse_bitflagset_args(input: &DeriveInput) -> syn::Result<BitFlagSetArgs> {
+    let mut element: Option<syn::Path> = None;
+
+    for attr in &input.attrs {
+        if !attr.path().is_ident("bitflagset") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("element") {
+                let value = meta.value()?;
+                element = Some(value.parse()?);
+                Ok(())
+            } else {
+                Err(meta.error("expected `element`"))
+            }
+        })?;
+    }
+
+    let element = element.ok_or_else(|| {
+        syn::Error::new_spanned(&input.ident, "missing #[bitflagset(element = Type)]")
+    })?;
+    Ok(BitFlagSetArgs { element })
+}
+
+fn impl_bitflagset(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let args = parse_bitflagset_args(input)?;
+    let name = &input.ident;
+    let typ = &args.element;
+
+    let fields = match &input.data {
+        syn::Data::Struct(data) => &data.fields,
+        _ => {
+            return Err(syn::Error::new_spanned(
+                name,
+                "BitFlagSet can only be derived for structs",
+            ));
+        }
+    };
+    let repr = match fields {
+        syn::Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+            &fields.unnamed.first().unwrap().ty
+        }
+        _ => {
+            return Err(syn::Error::new_spanned(
+                name,
+                "BitFlagSet struct must have exactly one unnamed field, e.g. `struct Foo(u8)`",
+            ));
+        }
+    };
+
+    Ok(quote! {
+        ::bitflagset::bitflagset!(@__derive_impls #name, #repr, #typ);
     })
 }

@@ -6,29 +6,44 @@ use num_traits::{AsPrimitive, PrimInt};
 
 use super::bitset::PrimBitSetIter;
 
-/// Iterator over set bit positions in a `BitSlice`.
-pub struct BitSliceIter<'a, T: PrimInt, V> {
-    words: &'a [T],
+/// Iterator over set bit positions in a word slice.
+///
+/// The storage `S` can be `&[T]`, `[T; N]`, `Box<[T]>`, etc.
+pub struct WordSetIter<S, T: PrimInt, V> {
+    store: S,
     word_idx: usize,
     current: PrimBitSetIter<T, usize>,
     _marker: PhantomData<V>,
 }
 
-impl<T: PrimInt + BitAndAssign, V> BitSliceIter<'_, T, V> {
+impl<S: AsRef<[T]>, T: PrimInt + BitAndAssign, V> WordSetIter<S, T, V> {
+    #[inline]
+    pub(crate) fn new(store: S) -> Self {
+        Self {
+            store,
+            word_idx: 0,
+            current: PrimBitSetIter::empty(),
+            _marker: PhantomData,
+        }
+    }
+
     #[inline]
     fn remaining_len(&self) -> usize {
         self.current.len()
-            + self.words[self.word_idx..]
+            + self.store.as_ref()[self.word_idx..]
                 .iter()
                 .map(|w| w.count_ones() as usize)
                 .sum::<usize>()
     }
 }
 
-impl<'a, T: PrimInt + BitAndAssign, V: TryFrom<usize>> Iterator for BitSliceIter<'a, T, V> {
+impl<S: AsRef<[T]>, T: PrimInt + BitAndAssign, V: TryFrom<usize>> Iterator
+    for WordSetIter<S, T, V>
+{
     type Item = V;
 
     fn next(&mut self) -> Option<V> {
+        let words = self.store.as_ref();
         let bits_per = core::mem::size_of::<T>() * 8;
         loop {
             if let Some(pos) = self.current.next() {
@@ -40,10 +55,10 @@ impl<'a, T: PrimInt + BitAndAssign, V: TryFrom<usize>> Iterator for BitSliceIter
                     Err(_) => unsafe { core::hint::unreachable_unchecked() },
                 }
             }
-            if self.word_idx >= self.words.len() {
+            if self.word_idx >= words.len() {
                 return None;
             }
-            self.current = PrimBitSetIter::from_raw(self.words[self.word_idx]);
+            self.current = PrimBitSetIter::from_raw(words[self.word_idx]);
             self.word_idx += 1;
         }
     }
@@ -63,14 +78,22 @@ impl<'a, T: PrimInt + BitAndAssign, V: TryFrom<usize>> Iterator for BitSliceIter
     }
 }
 
-impl<T: PrimInt + BitAndAssign, V: TryFrom<usize>> ExactSizeIterator for BitSliceIter<'_, T, V> {
+impl<S: AsRef<[T]>, T: PrimInt + BitAndAssign, V: TryFrom<usize>> ExactSizeIterator
+    for WordSetIter<S, T, V>
+{
     #[inline]
     fn len(&self) -> usize {
         self.remaining_len()
     }
 }
 
-impl<T: PrimInt + BitAndAssign, V: TryFrom<usize>> FusedIterator for BitSliceIter<'_, T, V> {}
+impl<S: AsRef<[T]>, T: PrimInt + BitAndAssign, V: TryFrom<usize>> FusedIterator
+    for WordSetIter<S, T, V>
+{
+}
+
+/// Iterator over set bit positions in a `BitSlice`.
+pub type BitSliceIter<'a, T, V> = WordSetIter<&'a [T], T, V>;
 
 /// Draining iterator over set bit positions in a `BitSlice`.
 ///
@@ -434,12 +457,7 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         T: BitAndAssign,
         V: TryFrom<usize>,
     {
-        BitSliceIter {
-            words: &self.1,
-            word_idx: 0,
-            current: PrimBitSetIter::empty(),
-            _marker: PhantomData,
-        }
+        WordSetIter::new(&self.1)
     }
 
     #[inline]
