@@ -660,6 +660,11 @@ impl<T: PrimStore, V, const N: usize> BitSet<[T; N], V> {
     }
 
     #[inline]
+    pub fn bits(&self) -> &[T; N] {
+        &self.0
+    }
+
+    #[inline]
     pub fn into_bits(self) -> [T; N] {
         self.0
     }

@@ -105,6 +105,11 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
     }
 
     #[inline]
+    pub fn bits(&self) -> &A {
+        &self.0
+    }
+
+    #[inline]
     pub fn into_bits(self) -> A {
         self.0
     }
@@ -539,6 +544,11 @@ impl<A: Radium, V, const N: usize> AtomicBitSet<[A; N], V> {
         let ret = Self::new();
         ret.set(id, true);
         ret
+    }
+
+    #[inline]
+    pub fn bits(&self) -> &[A; N] {
+        &self.0
     }
 
     #[inline]
