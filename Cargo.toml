@@ -1,14 +1,21 @@
 [workspace]
 members = [".", "bitflagset-derive"]
 
-[package]
-name = "bitflagset"
-version = "0.0.1"
+[workspace.package]
+version = "0.0.2"
 edition = "2024"
 rust-version = "1.86.0"
-description = "Type-safe bitsets with Set-like ergonomics"
 license = "MIT"
 repository = "https://github.com/youknowone/bitflagset"
+
+[package]
+name = "bitflagset"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Enum and positional typed bitsets with Set API"
 
 [lints.clippy]
 missing_safety_doc = "deny"
@@ -28,7 +35,7 @@ bitflags = ["dep:bitflags"]
 derive = ["dep:bitflagset-derive"]
 
 [dependencies]
-bitflagset-derive = { path = "bitflagset-derive", optional = true }
+bitflagset-derive = { version = "0.0.2", path = "bitflagset-derive", optional = true }
 bitflags = { version = "2.6", optional = true }
 bitvec = { version = "1.0.1", optional = true }
 num-integer = { version = "0.1.44", default-features = false }
