@@ -482,6 +482,11 @@ macro_rules! impl_bitset_const {
                 self.0
             }
 
+            #[inline]
+            pub const fn as_bits(&self) -> &$ty {
+                &self.0
+            }
+
             /// Const constructor from a single bit index.
             #[inline]
             pub const fn from_index(idx: usize) -> Self {
@@ -660,7 +665,7 @@ impl<T: PrimStore, V, const N: usize> BitSet<[T; N], V> {
     }
 
     #[inline]
-    pub fn bits(&self) -> &[T; N] {
+    pub fn as_bits(&self) -> &[T; N] {
         &self.0
     }
 
@@ -1091,7 +1096,7 @@ mod tests {
         use crate::BitFlagSet;
 
         crate::bitflag! {
-            #[derive(Debug)]
+            #[derive(Clone, Copy, PartialEq, Eq, Debug)]
             #[repr(u8)]
             enum Color {
                 Red = 0,
@@ -1100,7 +1105,7 @@ mod tests {
             }
         }
 
-        crate::bitflagset!(struct ColorSet(u8) : Color);
+        crate::bitflagset!(#[derive(Clone, Copy, PartialEq, Eq)] struct ColorSet(u8) : Color);
 
         // inherent method calls
         let set = ColorSet::from_element(Color::Green);

@@ -32,7 +32,7 @@ impl<B> Flag<B> {
 ///
 /// ```
 /// bitflagset::bitflag! {
-///     #[derive(Debug)]
+///     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 ///     #[repr(u8)]
 ///     enum Color {
 ///         Red = 0,
@@ -75,8 +75,6 @@ where
         + Clone
         + PartialEq
         + Eq
-        + PartialOrd
-        + Ord
         + core::ops::Sub<Self>
         + core::ops::SubAssign<Self>
         + core::ops::BitAnd<Self>
@@ -117,7 +115,7 @@ where
 ///
 /// ```
 /// bitflagset::bitflag! {
-///     #[derive(Debug)]
+///     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 ///     #[repr(u8)]
 ///     pub enum Color {
 ///         Red = 0,
@@ -164,7 +162,6 @@ macro_rules! bitflag {
             $($(#[$inner:meta])* $variant:ident $(= $value:expr)?),*
         }
     ) => {
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         $(#[$outer])*
         $vis enum $name {
             $($(#[$inner])* $variant $(= $value)?),*
@@ -284,7 +281,7 @@ macro_rules! __bitflagset_impl_flags {
 ///
 /// ```
 /// # bitflagset::bitflag! {
-/// #     #[derive(Debug)]
+/// #     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 /// #     #[repr(u8)]
 /// #     pub enum MyEnum {
 /// #         A = 0,
@@ -292,7 +289,7 @@ macro_rules! __bitflagset_impl_flags {
 /// #         C = 2,
 /// #     }
 /// # }
-/// bitflagset::bitflagset!(pub struct MySet(u8) : MyEnum);
+/// bitflagset::bitflagset!(#[derive(Clone, Copy, PartialEq, Eq)] pub struct MySet(u8) : MyEnum);
 /// ```
 ///
 /// Requirements:
@@ -312,6 +309,7 @@ macro_rules! __bitflagset_impl_flags {
 ///
 /// ```
 /// bitflagset::bitflagset! {
+///     #[derive(Clone, Copy, PartialEq, Eq)]
 ///     pub struct MyFlags(u8) {
 ///         const A = 0;
 ///         const B = 1;
@@ -420,8 +418,8 @@ macro_rules! bitflagset {
         }
     };
 
-    ($vis:vis struct $name:ident($repr:ty) : $typ:ty) => {
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    ($(#[$outer:meta])* $vis:vis struct $name:ident($repr:ty) : $typ:ty) => {
+        $(#[$outer])*
         $vis struct $name($repr);
 
         $crate::bitflagset!(@__derive_impls $name, $repr, $typ);
@@ -478,6 +476,10 @@ macro_rules! bitflagset {
             #[inline]
             pub const fn bits(&self) -> $repr {
                 self.0
+            }
+            #[inline]
+            pub const fn as_bits(&self) -> &$repr {
+                &self.0
             }
             #[inline]
             pub const unsafe fn from_bits_unchecked(bits: $repr) -> Self {
@@ -850,10 +852,10 @@ macro_rules! bitflagset {
         $crate::__bitflagset_impl_flags!($name, $repr, bitflag: $typ);
     };
 
-    ($vis:vis struct $name:ident($repr:ty) {
+    ($(#[$outer:meta])* $vis:vis struct $name:ident($repr:ty) {
         $($(#[$inner:meta])* const $flag:ident = $value:expr;)*
     }) => {
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        $(#[$outer])*
         $vis struct $name($crate::BitSet<$repr, u8>);
 
         $(
@@ -897,6 +899,10 @@ macro_rules! bitflagset {
             #[inline]
             pub const fn bits(&self) -> $repr {
                 self.0.bits()
+            }
+            #[inline]
+            pub const fn as_bits(&self) -> &$repr {
+                self.0.as_bits()
             }
 
             #[inline]
@@ -1991,7 +1997,7 @@ mod bitflag_tests {
     use super::BitFlag;
 
     crate::bitflag! {
-        #[derive(Debug)]
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
         #[repr(u8)]
         enum Color {
             Red = 0,
@@ -2000,7 +2006,7 @@ mod bitflag_tests {
         }
     }
 
-    crate::bitflagset!(struct ColorSet(u8) : Color);
+    crate::bitflagset!(#[derive(Clone, Copy, PartialEq, Eq)] struct ColorSet(u8) : Color);
 
     #[test]
     fn flags_list() {
@@ -2152,7 +2158,7 @@ mod bitflag_tests {
     #[test]
     fn auto_discriminants() {
         crate::bitflag! {
-            #[derive(Debug)]
+            #[derive(Clone, Copy, PartialEq, Eq, Debug)]
             #[repr(u8)]
             enum Shape {
                 Circle,
@@ -2166,7 +2172,7 @@ mod bitflag_tests {
         assert_eq!(Shape::FLAGS.len(), 3);
         assert_eq!(Shape::FLAGS[0].name(), "Circle");
 
-        crate::bitflagset!(struct ShapeSet(u8) : Shape);
+        crate::bitflagset!(#[derive(Clone, Copy, PartialEq, Eq)] struct ShapeSet(u8) : Shape);
         let mut set = ShapeSet::from_element(Shape::Circle);
         set.insert(Shape::Triangle);
         assert!(set.contains(&Shape::Circle));
@@ -2181,7 +2187,7 @@ mod bitflags_enum_tests {
     use bitflags::Flags;
 
     crate::bitflag! {
-        #[derive(Debug)]
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
         #[repr(u8)]
         enum Color {
             Red = 0,
@@ -2190,7 +2196,7 @@ mod bitflags_enum_tests {
         }
     }
 
-    crate::bitflagset!(struct ColorSet(u8) : Color);
+    crate::bitflagset!(#[derive(Clone, Copy, PartialEq, Eq)] struct ColorSet(u8) : Color);
 
     #[test]
     fn flags_bits_roundtrip() {
@@ -2265,7 +2271,7 @@ mod derive_bitflag_tests {
         Triangle,
     }
 
-    crate::bitflagset!(struct ShapeSet(u8) : Shape);
+    crate::bitflagset!(#[derive(Clone, Copy, PartialEq, Eq)] struct ShapeSet(u8) : Shape);
 
     #[test]
     fn derive_flags_list() {
@@ -2450,6 +2456,7 @@ mod bitflags_mode_tests {
     use alloc::{format, vec, vec::Vec};
 
     crate::bitflagset! {
+        #[derive(Clone, Copy, PartialEq, Eq)]
         struct Perms(u8) {
             const READ = 0;
             const WRITE = 1;
@@ -2734,6 +2741,7 @@ mod bitflags_mode_interop_tests {
     use bitflags::Flags;
 
     crate::bitflagset! {
+        #[derive(Clone, Copy, PartialEq, Eq)]
         struct Perms(u8) {
             const READ = 0;
             const WRITE = 1;
@@ -2789,8 +2797,8 @@ mod atomic_bitflagset_tests {
     use core::sync::atomic::AtomicU8;
 
     crate::bitflag! {
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
         #[repr(u8)]
-        #[derive(Debug)]
         enum Color {
             Red = 0,
             Green = 1,
@@ -2798,10 +2806,11 @@ mod atomic_bitflagset_tests {
         }
     }
 
-    crate::bitflagset!(struct ColorSet(u8) : Color);
+    crate::bitflagset!(#[derive(Clone, Copy, PartialEq, Eq)] struct ColorSet(u8) : Color);
     crate::atomic_bitflagset!(struct AtomicColorSet(AtomicU8) on ColorSet);
 
     crate::bitflagset! {
+        #[derive(Clone, Copy, PartialEq, Eq)]
         struct Perms(u8) {
             const READ = 0;
             const WRITE = 1;
