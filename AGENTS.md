@@ -1,5 +1,3 @@
-# bitset-rust
-
 Rust crate `bitflagset` — type-safe bitsets with multiple storage backends.
 
 ## Build & Test
@@ -10,10 +8,6 @@ cargo test
 cargo test --all-features
 cargo clippy
 ```
-
-## Language
-
-- English-first project: all code, comments, and documentation must be in English.
 
 ## Code Style
 

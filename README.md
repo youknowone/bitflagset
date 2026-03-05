@@ -1,4 +1,4 @@
-# bitset-rust
+# bitflagset
 
 Type-safe bitsets with `Set`-like ergonomics. Operations are direct primitive bit operations over words. Optional bitvec interop via the `bitvec` feature.
 
