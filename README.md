@@ -12,12 +12,12 @@ Type-safe bitsets with `Set`-like ergonomics. Operations are direct primitive bi
 
 **Const-friendly primitives.** For single-primitive `BitSet<u64, V>`, all query methods (`len`, `is_empty`, `is_subset`, ...) and constructors (`from_bits`, `from_index`, `from_indices`) are `const fn`. Build complex bitsets at compile time with zero runtime cost.
 
-**Full bit-operator support.** Non-atomic owned types (`BitSet`, `BoxedBitSet`) implement `BitOr`, `BitAnd`, `BitXor`, `Not`, `Sub` and their `Assign` variants. Atomic types (`AtomicBitSet`, `AtomicBoxedBitSet`) expose equivalent set operations via named methods (`union`, `difference`, `includes`, etc.) since atomics are inherently `&self`-based.
+**Full bit-operator support.** Non-atomic owned types (`BitSet`, `BoxedBitSet`) implement `BitOr`, `BitAnd`, `BitXor`, `Not`, `Sub` and their `Assign` variants. Atomic types (`AtomicBitSet`, `AtomicBoxedBitSet`) expose equivalent set operations via named methods (`union`, `difference`, etc.) since atomics are inherently `&self`-based.
 
 ## Performance
 
 <!-- BENCH_TABLES:BEGIN -->
-All numbers below are Criterion medians from `cargo bench --bench vs_bitvec` on Apple M-series (AArch64), collected on **2026-02-26**. Compared against bitvec `BitArray` (non-atomic) and `BitArray<AtomicU64>` / `BitVec<AtomicU64>` (atomic).  
+All numbers below are Criterion medians from `cargo bench --bench vs_bitvec` on Apple M-series (AArch64), collected on **2026-03-08**. Compared against bitvec `BitArray` (non-atomic) and `BitArray<AtomicU64>` / `BitVec<AtomicU64>` (atomic).  
 `iter` rows measure `.iter().count()`.
 
 ### Non-atomic: `BitSet` vs bitvec `BitArray`
@@ -26,21 +26,21 @@ All numbers below are Criterion medians from `cargo bench --bench vs_bitvec` on 
 
 | Operation | bitflagset | bitvec | Speedup |
 |-----------|-----------|--------|---------|
-| `bitor` | 1.48 ns | 22.68 ns | **15.3x** |
-| `bitand` | 1.48 ns | 22.62 ns | **15.3x** |
-| `bitxor` | 1.48 ns | 22.63 ns | **15.3x** |
-| `not` | 1.06 ns | 1.63 ns | **1.5x** |
-| `iter` | 0.52 ns | 2.23 ns | **4.3x** |
+| `bitor` | 1.53 ns | 23.58 ns | **15.4x** |
+| `bitand` | 1.53 ns | 24.95 ns | **16.3x** |
+| `bitxor` | 1.53 ns | 23.42 ns | **15.3x** |
+| `not` | 1.09 ns | 1.67 ns | **1.5x** |
+| `iter` | 0.53 ns | 2.29 ns | **4.3x** |
 
 **1024-bit** (`[u64; 16]`):
 
 | Operation | bitflagset | bitvec | Speedup |
 |-----------|-----------|--------|---------|
-| `bitor` | 5.90 ns | 93.08 ns | **15.8x** |
-| `bitand` | 5.88 ns | 94.39 ns | **16.1x** |
-| `bitxor` | 6.44 ns | 94.61 ns | **14.7x** |
-| `not` | 4.38 ns | 7.54 ns | **1.7x** |
-| `iter` | 1.79 ns | 2.82 ns | **1.6x** |
+| `bitor` | 6.03 ns | 96.12 ns | **15.9x** |
+| `bitand` | 6.03 ns | 95.60 ns | **15.9x** |
+| `bitxor` | 6.93 ns | 98.00 ns | **14.1x** |
+| `not` | 4.42 ns | 7.83 ns | **1.8x** |
+| `iter` | 1.81 ns | 2.41 ns | **1.3x** |
 
 Binary operators benefit from LLVM auto-vectorization of word-level loops into SIMD instructions.
 
@@ -50,30 +50,21 @@ Binary operators benefit from LLVM auto-vectorization of word-level loops into S
 
 | Operation | bitflagset | bitvec | Speedup |
 |-----------|-----------|--------|---------|
-| `len` | 1.02 ns | 2.00 ns | **2.0x** |
-| `is_empty` | 0.50 ns | 2.64 ns | **5.3x** |
-| `contains` | 0.62 ns | 0.63 ns | **1.0x** |
-| `insert` | 1.25 ns | 1.52 ns | **1.2x** |
-| `iter` | 1.03 ns | 2.01 ns | **2.0x** |
+| `len` | 1.06 ns | 2.05 ns | **1.9x** |
+| `is_empty` | 0.51 ns | 2.43 ns | **4.8x** |
+| `contains` | 0.67 ns | 0.65 ns | **1.0x** |
+| `insert` | 1.28 ns | 1.55 ns | **1.2x** |
+| `iter` | 1.20 ns | 2.80 ns | **2.3x** |
 
 **1024-bit** (`[AtomicU64; 16]`):
 
 | Operation | bitflagset | bitvec | Speedup |
 |-----------|-----------|--------|---------|
-| `len` | 2.86 ns | 5.69 ns | **2.0x** |
-| `is_empty` | 0.50 ns | 5.64 ns | **11.4x** |
-| `contains` | 0.61 ns | 0.63 ns | **1.0x** |
-| `insert` | 2.51 ns | 2.40 ns | **1.0x** |
-| `iter` | 2.86 ns | 5.75 ns | **2.0x** |
-
-**65536-bit** (heap-allocated, `AtomicBoxedBitSet` vs bitvec `BitVec<AtomicU64>`):
-
-| Operation | bitflagset | bitvec | Speedup |
-|-----------|-----------|--------|---------|
-| `len` | 291.32 ns | 294.67 ns | **1.0x** |
-| `is_empty` | 0.51 ns | 290.41 ns | **570.5x** |
-| `contains` | 0.61 ns | 0.70 ns | **1.2x** |
-| `iter` | 283.59 ns | 289.64 ns | **1.0x** |
+| `len` | 2.91 ns | 7.58 ns | **2.6x** |
+| `is_empty` | 0.51 ns | 5.95 ns | **11.6x** |
+| `contains` | 0.63 ns | 0.66 ns | **1.0x** |
+| `insert` | 2.13 ns | 2.52 ns | **1.2x** |
+| `iter` | 2.96 ns | 5.89 ns | **2.0x** |
 
 `is_empty` uses short-circuit evaluation (early return on first non-zero word).
 <!-- BENCH_TABLES:END -->

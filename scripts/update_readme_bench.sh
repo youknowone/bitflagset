@@ -183,18 +183,6 @@ EOF
 
     cat <<'EOF'
 
-**65536-bit** (heap-allocated, `AtomicBoxedBitSet` vs bitvec `BitVec<AtomicU64>`):
-
-| Operation | bitflagset | bitvec | Speedup |
-|-----------|-----------|--------|---------|
-EOF
-    row "len" "65536bit_atomic_boxed_vs_bitvec" "atomic_len" "bitvec_count_ones"
-    row "is_empty" "65536bit_atomic_boxed_vs_bitvec" "atomic_is_empty" "bitvec_not_any"
-    row "contains" "65536bit_atomic_boxed_vs_bitvec" "atomic_contains" "bitvec_get"
-    row "iter" "65536bit_atomic_boxed_vs_bitvec" "atomic_iter" "bitvec_iter_ones"
-
-    cat <<'EOF'
-
 `is_empty` uses short-circuit evaluation (early return on first non-zero word).
 EOF
 }
