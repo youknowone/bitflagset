@@ -24,6 +24,16 @@ use super::boxed::BoxedBitSet;
 /// [`AtomicBitSlice`] for details.
 pub struct AtomicBoxedBitSet<A, V>(Box<[A]>, PhantomData<V>);
 
+impl<A: Radium, V> core::fmt::Debug for AtomicBoxedBitSet<A, V>
+where
+    A::Item: PrimInt + core::ops::BitAndAssign,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("AtomicBoxedBitSet")?;
+        core::fmt::Debug::fmt(&**self, f)
+    }
+}
+
 impl<A: Radium, V> Deref for AtomicBoxedBitSet<A, V>
 where
     A::Item: PrimInt,

@@ -196,14 +196,6 @@ impl<A: PrimStore, V> BitSet<A, V> {
         BitSet(self.0 & !*other, PhantomData)
     }
 
-    #[inline]
-    pub fn includes(&self, other: &A) -> bool
-    where
-        A: Copy + core::ops::BitAnd<Output = A> + PartialEq,
-    {
-        self.0 & *other == *other
-    }
-
     /// Snapshot iterator over set bit positions.
     /// Copies the raw bits, so the bitset can be mutated while iterating.
     #[inline]
@@ -768,6 +760,20 @@ impl<T: PartialEq, V, const N: usize> PartialEq for BitSet<[T; N], V> {
 
 impl<T: Eq, V, const N: usize> Eq for BitSet<[T; N], V> {}
 
+impl<T: Ord, V, const N: usize> PartialOrd for BitSet<[T; N], V> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T: Ord, V, const N: usize> Ord for BitSet<[T; N], V> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
 impl<T: Hash, V, const N: usize> Hash for BitSet<[T; N], V> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state);
@@ -786,6 +792,68 @@ impl<T: PrimInt, V, const N: usize> core::fmt::Debug for BitSet<[T; N], V> {
             }
         }
         formatter.finish()
+    }
+}
+
+impl<T: PrimInt + core::fmt::Binary, V, const N: usize> core::fmt::Binary for BitSet<[T; N], V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let bits_per = core::mem::size_of::<T>() * 8;
+        for (i, &word) in self.0.iter().enumerate().rev() {
+            if i == N - 1 {
+                core::fmt::Binary::fmt(&word, f)?;
+            } else {
+                write!(f, "{:0>width$b}", word, width = bits_per)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<T: PrimInt + core::fmt::Octal, V, const N: usize> core::fmt::Octal for BitSet<[T; N], V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // Octal doesn't align cleanly to word boundaries, format as combined value
+        // by formatting each word with zero-padding
+        let width = (core::mem::size_of::<T>() * 8 + 2) / 3; // ceil(bits/3)
+        for (i, &word) in self.0.iter().enumerate().rev() {
+            if i == N - 1 {
+                core::fmt::Octal::fmt(&word, f)?;
+            } else {
+                write!(f, "{:0>width$o}", word, width = width)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<T: PrimInt + core::fmt::LowerHex, V, const N: usize> core::fmt::LowerHex
+    for BitSet<[T; N], V>
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let hex_per = core::mem::size_of::<T>() * 2;
+        for (i, &word) in self.0.iter().enumerate().rev() {
+            if i == N - 1 {
+                core::fmt::LowerHex::fmt(&word, f)?;
+            } else {
+                write!(f, "{:0>width$x}", word, width = hex_per)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<T: PrimInt + core::fmt::UpperHex, V, const N: usize> core::fmt::UpperHex
+    for BitSet<[T; N], V>
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let hex_per = core::mem::size_of::<T>() * 2;
+        for (i, &word) in self.0.iter().enumerate().rev() {
+            if i == N - 1 {
+                core::fmt::UpperHex::fmt(&word, f)?;
+            } else {
+                write!(f, "{:0>width$X}", word, width = hex_per)?;
+            }
+        }
+        Ok(())
     }
 }
 

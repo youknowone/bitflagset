@@ -359,15 +359,6 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
     }
 
     #[inline]
-    pub fn includes(&self, other: A::Item) -> bool
-    where
-        A::Item: PrimInt,
-    {
-        let store = self.0.load(Ordering::Relaxed);
-        store & other == other
-    }
-
-    #[inline]
     pub fn iter(&self) -> PrimBitSetIter<A::Item, V>
     where
         A::Item: PrimInt,
@@ -564,6 +555,32 @@ impl<A: Radium, V, const N: usize> AtomicBitSet<[A; N], V> {
         for (atomic, value) in self.0.iter().zip(other.as_slice().iter()) {
             atomic.fetch_or(*value, Ordering::AcqRel);
         }
+    }
+
+    #[inline]
+    pub fn union(&self, other: &BitSet<[<A as Radium>::Item; N], V>) -> BitSet<[<A as Radium>::Item; N], V>
+    where
+        <A as Radium>::Item: Copy + PrimInt + super::bitset::PrimStore,
+    {
+        let other_bits = &other.0;
+        let mut raw = [<A as Radium>::Item::ZERO; N];
+        for (i, atomic) in self.0.iter().enumerate() {
+            raw[i] = atomic.load(Ordering::Relaxed) | other_bits[i];
+        }
+        BitSet(raw, PhantomData)
+    }
+
+    #[inline]
+    pub fn difference(&self, other: &BitSet<[<A as Radium>::Item; N], V>) -> BitSet<[<A as Radium>::Item; N], V>
+    where
+        <A as Radium>::Item: Copy + PrimInt + super::bitset::PrimStore,
+    {
+        let other_bits = &other.0;
+        let mut raw = [<A as Radium>::Item::ZERO; N];
+        for (i, atomic) in self.0.iter().enumerate() {
+            raw[i] = atomic.load(Ordering::Relaxed) & !other_bits[i];
+        }
+        BitSet(raw, PhantomData)
     }
 
     #[inline]
@@ -786,9 +803,6 @@ mod tests {
         let diff_items: Vec<usize> = diff.iter().collect();
         assert_eq!(diff_items, vec![1]); // 1 is in a but not in other
 
-        // includes
-        assert!(a.includes((1 << 1) | (1 << 5))); // a has {1, 5}
-        assert!(!a.includes((1 << 1) | (1 << 10))); // a doesn't have 10
     }
 
     // ── array tests ──

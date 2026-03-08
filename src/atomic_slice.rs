@@ -312,6 +312,105 @@ where
         })
     }
 
+    fn word_op_iter<'a>(
+        a: &'a [A],
+        b: &'a [A],
+        len: usize,
+        op: impl Fn(A::Item, A::Item) -> A::Item + 'a,
+    ) -> impl Iterator<Item = V> + 'a
+    where
+        A::Item: BitAndAssign,
+        V: TryFrom<usize>,
+    {
+        let bits_per = Self::BITS_PER;
+        (0..len).flat_map(move |i| {
+            let w_a = a
+                .get(i)
+                .map(|a| a.load(Ordering::Relaxed))
+                .unwrap_or(A::Item::zero());
+            let w_b = b
+                .get(i)
+                .map(|a| a.load(Ordering::Relaxed))
+                .unwrap_or(A::Item::zero());
+            let combined = op(w_a, w_b);
+            let offset = i * bits_per;
+            PrimBitSetIter::<A::Item, usize>(combined, PhantomData).map(move |pos| {
+                let idx = offset + pos;
+                debug_assert!(V::try_from(idx).is_ok());
+                match V::try_from(idx) {
+                    Ok(v) => v,
+                    Err(_) => unsafe { core::hint::unreachable_unchecked() },
+                }
+            })
+        })
+    }
+
+    #[inline]
+    pub fn difference<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = V> + 'a
+    where
+        A::Item: BitAndAssign,
+        V: TryFrom<usize>,
+    {
+        Self::word_op_iter(&self.1, &other.1, self.1.len(), |a, b| a & !b)
+    }
+
+    #[inline]
+    pub fn intersection<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = V> + 'a
+    where
+        A::Item: BitAndAssign,
+        V: TryFrom<usize>,
+    {
+        Self::word_op_iter(
+            &self.1,
+            &other.1,
+            self.1.len().min(other.1.len()),
+            |a, b| a & b,
+        )
+    }
+
+    #[inline]
+    pub fn union<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = V> + 'a
+    where
+        A::Item: BitAndAssign,
+        V: TryFrom<usize>,
+    {
+        Self::word_op_iter(
+            &self.1,
+            &other.1,
+            self.1.len().max(other.1.len()),
+            |a, b| a | b,
+        )
+    }
+
+    #[inline]
+    pub fn symmetric_difference<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = V> + 'a
+    where
+        A::Item: BitAndAssign,
+        V: TryFrom<usize>,
+    {
+        Self::word_op_iter(
+            &self.1,
+            &other.1,
+            self.1.len().max(other.1.len()),
+            |a, b| a ^ b,
+        )
+    }
+
+    pub fn append(&self, other: &Self)
+    where
+        A::Item: radium::marker::BitOps + Copy,
+    {
+        let min = self.1.len().min(other.1.len());
+        for i in 0..min {
+            let val = other.1[i].swap(A::Item::zero(), Ordering::AcqRel);
+            self.1[i].fetch_or(val, Ordering::AcqRel);
+        }
+        // Clear remaining words in other beyond self's range
+        for a in &other.1[min..] {
+            a.store(A::Item::zero(), Ordering::Release);
+        }
+    }
+
     #[inline]
     pub fn union_from(&self, other: &[A::Item])
     where
@@ -320,5 +419,29 @@ where
         for (atomic, &value) in self.1.iter().zip(other.iter()) {
             atomic.fetch_or(value, Ordering::AcqRel);
         }
+    }
+}
+
+impl<A, V> core::fmt::Debug for AtomicBitSlice<A, V>
+where
+    A: Radium,
+    A::Item: PrimInt + BitAndAssign,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let bits_per = core::mem::size_of::<A>() * 8;
+        f.write_str("{")?;
+        let mut first = true;
+        for (i, a) in self.1.iter().enumerate() {
+            let word = a.load(Ordering::Relaxed);
+            let offset = i * bits_per;
+            for pos in PrimBitSetIter::<A::Item, usize>(word, PhantomData) {
+                if !first {
+                    f.write_str(", ")?;
+                }
+                first = false;
+                write!(f, "{}", offset + pos)?;
+            }
+        }
+        f.write_str("}")
     }
 }
