@@ -443,6 +443,13 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         }
     }
 
+    pub fn union_from(&mut self, other: &Self) {
+        let min = self.1.len().min(other.1.len());
+        for i in 0..min {
+            self.1[i] = self.1[i] | other.1[i];
+        }
+    }
+
     pub fn append(&mut self, other: &mut Self) {
         let min = self.1.len().min(other.1.len());
         for i in 0..min {

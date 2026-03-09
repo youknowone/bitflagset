@@ -207,30 +207,11 @@ impl<A: PrimStore, V> BitSet<A, V> {
     }
 
     #[inline]
-    pub fn load_store(&self) -> A
-    where
-        A: Copy,
-    {
-        self.0
-    }
-
-    #[inline]
-    pub fn swap_store(&mut self, store: &mut A) {
-        core::mem::swap(&mut self.0, store);
-    }
-
-    #[inline]
-    pub fn mut_store(&mut self, f: impl Fn(&mut A)) {
-        f(&mut self.0);
-    }
-
-    #[inline]
     pub fn drain(&mut self) -> PrimBitSetIter<A, V>
     where
         A: PrimInt + Zero,
     {
-        let mut store = A::zero();
-        self.swap_store(&mut store);
+        let store = core::mem::replace(&mut self.0, A::zero());
         PrimBitSetIter(store, PhantomData)
     }
 
@@ -633,11 +614,6 @@ impl<T: PrimStore, V, const N: usize> BitSet<[T; N], V> {
     #[inline]
     pub const fn new() -> Self {
         Self::ZERO
-    }
-
-    #[inline]
-    pub const fn empty() -> Self {
-        Self::new()
     }
 
     #[inline]

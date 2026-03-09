@@ -84,11 +84,6 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
     }
 
     #[inline]
-    pub const fn empty() -> Self {
-        Self::new()
-    }
-
-    #[inline]
     pub fn from_element(elem: V) -> Self
     where
         V: AsPrimitive<usize>,
@@ -367,23 +362,6 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
     }
 
     #[inline]
-    pub fn load_store(&self) -> A::Item
-    where
-        A::Item: Clone,
-    {
-        self.0.load(Ordering::Relaxed)
-    }
-
-    #[inline]
-    pub fn swap_store(&self, store: &mut A::Item)
-    where
-        A::Item: Copy,
-    {
-        let prev = self.0.swap(*store, Ordering::AcqRel);
-        *store = prev;
-    }
-
-    #[inline]
     pub fn union_from(&self, other: A::Item)
     where
         A::Item: Copy + radium::marker::BitOps,
@@ -396,8 +374,7 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
     where
         A::Item: Copy + PrimInt + Zero,
     {
-        let mut store = A::Item::zero();
-        self.swap_store(&mut store);
+        let store = self.0.swap(A::Item::zero(), Ordering::AcqRel);
         PrimBitSetIter(store, PhantomData)
     }
 
@@ -517,11 +494,6 @@ impl<A: Radium, V, const N: usize> AtomicBitSet<[A; N], V> {
     }
 
     #[inline]
-    pub const fn empty() -> Self {
-        Self::new()
-    }
-
-    #[inline]
     pub fn from_bits(raw: [A; N]) -> Self {
         Self(raw, PhantomData)
     }
@@ -558,7 +530,10 @@ impl<A: Radium, V, const N: usize> AtomicBitSet<[A; N], V> {
     }
 
     #[inline]
-    pub fn union(&self, other: &BitSet<[<A as Radium>::Item; N], V>) -> BitSet<[<A as Radium>::Item; N], V>
+    pub fn union(
+        &self,
+        other: &BitSet<[<A as Radium>::Item; N], V>,
+    ) -> BitSet<[<A as Radium>::Item; N], V>
     where
         <A as Radium>::Item: Copy + PrimInt + super::bitset::PrimStore,
     {
@@ -571,7 +546,10 @@ impl<A: Radium, V, const N: usize> AtomicBitSet<[A; N], V> {
     }
 
     #[inline]
-    pub fn difference(&self, other: &BitSet<[<A as Radium>::Item; N], V>) -> BitSet<[<A as Radium>::Item; N], V>
+    pub fn difference(
+        &self,
+        other: &BitSet<[<A as Radium>::Item; N], V>,
+    ) -> BitSet<[<A as Radium>::Item; N], V>
     where
         <A as Radium>::Item: Copy + PrimInt + super::bitset::PrimStore,
     {
@@ -802,7 +780,6 @@ mod tests {
         let diff = a.difference(other);
         let diff_items: Vec<usize> = diff.iter().collect();
         assert_eq!(diff_items, vec![1]); // 1 is in a but not in other
-
     }
 
     // ── array tests ──

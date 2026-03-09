@@ -1313,15 +1313,8 @@ macro_rules! atomic_bitflagset {
         }
     };
 
-    // Internal enum form implementation
-    (@enum_impl $vis:vis struct $name:ident($atomic:ty, $set:ty) : $typ:ty) => {
-        $vis struct $name($crate::AtomicBitSet<$atomic, u8>);
-
-        const _: () = assert!(
-            <$typ as $crate::BitFlag>::MAX_VALUE < (core::mem::size_of::<$atomic>() * 8) as u8,
-            "atomic_bitflagset! enum discriminant exceeds storage width"
-        );
-
+    // Requires `Self::all_bits()` and `Self::from_raw()`.
+    (@common $name:ident, $atomic:ty, $set:ty) => {
         impl Default for $name {
             #[inline]
             fn default() -> Self {
@@ -1329,22 +1322,11 @@ macro_rules! atomic_bitflagset {
             }
         }
 
+        #[allow(dead_code)]
         impl $name {
             #[inline]
-            fn all_mask() -> <$atomic as $crate::__private::radium::Radium>::Item {
-                let mut mask: <$atomic as $crate::__private::radium::Radium>::Item = 0;
-                let mut i = 0usize;
-                while i < <$typ as $crate::BitFlag>::FLAGS.len() {
-                    let shift = *<$typ as $crate::BitFlag>::FLAGS[i].value() as u8;
-                    mask |= (1 as <$atomic as $crate::__private::radium::Radium>::Item) << shift;
-                    i += 1;
-                }
-                mask
-            }
-
-            #[inline]
-            fn from_raw(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Self {
-                Self($crate::AtomicBitSet::<$atomic, u8>::from_bits(<$atomic>::new(bits)))
+            fn load_bits(&self) -> <$atomic as $crate::__private::radium::Radium>::Item {
+                self.0.as_bits().load(core::sync::atomic::Ordering::Relaxed)
             }
 
             #[inline]
@@ -1358,8 +1340,8 @@ macro_rules! atomic_bitflagset {
             }
 
             #[inline]
-            pub fn bits(&self) -> <$atomic as $crate::__private::radium::Radium>::Item {
-                self.0.load_store()
+            pub fn as_bits(&self) -> &$atomic {
+                self.0.as_bits()
             }
 
             #[inline]
@@ -1369,7 +1351,7 @@ macro_rules! atomic_bitflagset {
 
             #[inline]
             pub fn from_bits(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Option<Self> {
-                if bits & !Self::all_mask() == 0 {
+                if bits & !Self::all_bits() == 0 {
                     Some(Self::from_raw(bits))
                 } else {
                     None
@@ -1378,23 +1360,154 @@ macro_rules! atomic_bitflagset {
 
             #[inline]
             pub fn from_bits_truncate(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Self {
-                Self::from_raw(bits & Self::all_mask())
+                Self::from_raw(bits & Self::all_bits())
             }
 
             #[inline]
             pub fn from_plain(set: $set) -> Self {
-                let bits: <$atomic as $crate::__private::radium::Radium>::Item = set.bits();
-                Self::from_raw(bits)
+                Self::from_raw(set.bits())
             }
 
             #[inline]
             pub fn into_plain(self) -> $set {
-                <$set>::from_bits_retain(self.bits())
+                <$set>::from_bits_retain(self.load_bits())
             }
 
             #[inline]
             pub fn swap_bits(&self, bits: &mut <$atomic as $crate::__private::radium::Radium>::Item) {
-                self.0.swap_store(bits);
+                *bits = self.0.as_bits().swap(*bits, core::sync::atomic::Ordering::AcqRel);
+            }
+
+            #[inline]
+            pub fn all() -> Self {
+                Self::from_raw(Self::all_bits())
+            }
+
+            #[inline]
+            pub fn is_all(&self) -> bool {
+                self.load_bits() == Self::all_bits()
+            }
+
+            #[inline]
+            pub fn complement(&self) -> Self {
+                Self::from_raw(Self::all_bits() & !self.load_bits())
+            }
+
+            #[inline]
+            pub fn len(&self) -> usize {
+                self.0.len()
+            }
+
+            #[inline]
+            pub fn is_empty(&self) -> bool {
+                self.0.is_empty()
+            }
+
+            #[inline]
+            pub fn clear(&self) {
+                self.0.clear();
+            }
+
+            #[inline]
+            pub fn is_subset(&self, other: &Self) -> bool {
+                self.0.is_subset(&other.0)
+            }
+
+            #[inline]
+            pub fn is_superset(&self, other: &Self) -> bool {
+                self.0.is_superset(&other.0)
+            }
+
+            #[inline]
+            pub fn is_disjoint(&self, other: &Self) -> bool {
+                self.0.is_disjoint(&other.0)
+            }
+        }
+
+        impl From<$set> for $name {
+            #[inline]
+            fn from(value: $set) -> Self {
+                Self::from_plain(value)
+            }
+        }
+
+        impl From<&$name> for $set {
+            #[inline]
+            fn from(value: &$name) -> Self {
+                <$set>::from_bits_retain(value.load_bits())
+            }
+        }
+
+        impl From<$name> for $set {
+            #[inline]
+            fn from(value: $name) -> Self {
+                value.into_plain()
+            }
+        }
+
+        impl core::fmt::Binary for $name
+        where
+            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::Binary,
+        {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Binary::fmt(&self.load_bits(), f)
+            }
+        }
+
+        impl core::fmt::Octal for $name
+        where
+            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::Octal,
+        {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Octal::fmt(&self.load_bits(), f)
+            }
+        }
+
+        impl core::fmt::LowerHex for $name
+        where
+            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::LowerHex,
+        {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::LowerHex::fmt(&self.load_bits(), f)
+            }
+        }
+
+        impl core::fmt::UpperHex for $name
+        where
+            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::UpperHex,
+        {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::UpperHex::fmt(&self.load_bits(), f)
+            }
+        }
+    };
+
+    // Enum form: element type is $typ with TryFrom<u8> conversion.
+    (@enum_impl $vis:vis struct $name:ident($atomic:ty, $set:ty) : $typ:ty) => {
+        $vis struct $name($crate::AtomicBitSet<$atomic, u8>);
+
+        const _: () = assert!(
+            <$typ as $crate::BitFlag>::MAX_VALUE < (core::mem::size_of::<$atomic>() * 8) as u8,
+            "atomic_bitflagset! enum discriminant exceeds storage width"
+        );
+
+        #[allow(dead_code)]
+        impl $name {
+            #[inline]
+            fn all_bits() -> <$atomic as $crate::__private::radium::Radium>::Item {
+                let mut mask: <$atomic as $crate::__private::radium::Radium>::Item = 0;
+                let mut i = 0usize;
+                while i < <$typ as $crate::BitFlag>::FLAGS.len() {
+                    let shift = *<$typ as $crate::BitFlag>::FLAGS[i].value() as u8;
+                    mask |= (1 as <$atomic as $crate::__private::radium::Radium>::Item) << shift;
+                    i += 1;
+                }
+                mask
+            }
+
+            #[inline]
+            fn from_raw(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Self {
+                Self($crate::AtomicBitSet::<$atomic, u8>::from_bits(<$atomic>::new(bits)))
             }
 
             #[inline]
@@ -1416,68 +1529,28 @@ macro_rules! atomic_bitflagset {
             }
 
             #[inline]
-            pub fn all() -> Self {
-                Self::from_raw(Self::all_mask())
-            }
-
-            #[inline]
-            pub fn is_all(&self) -> bool {
-                self.bits() == Self::all_mask()
-            }
-
-            #[inline]
-            pub fn complement(&self) -> Self {
-                Self::from_raw(Self::all_mask() & !self.bits())
-            }
-
-            #[inline]
-            pub fn len(&self) -> usize {
-                self.0.len()
-            }
-
-            #[inline]
-            pub fn is_empty(&self) -> bool {
-                self.0.is_empty()
-            }
-
-            #[inline]
             pub fn contains(&self, value: &$typ) -> bool {
-                let shift = *value as u8;
-                debug_assert!(shift < (core::mem::size_of::<$atomic>() * 8) as u8);
-                self.0.contains(&shift)
+                self.0.contains(&(*value as u8))
             }
 
             #[inline]
             pub fn set(&self, value: $typ, enabled: bool) {
-                let shift = value as u8;
-                debug_assert!(shift < (core::mem::size_of::<$atomic>() * 8) as u8);
-                self.0.set(shift, enabled);
+                self.0.set(value as u8, enabled);
             }
 
             #[inline]
             pub fn insert(&self, value: $typ) -> bool {
-                let shift = value as u8;
-                debug_assert!(shift < (core::mem::size_of::<$atomic>() * 8) as u8);
-                self.0.insert(shift)
+                self.0.insert(value as u8)
             }
 
             #[inline]
             pub fn remove(&self, value: $typ) -> bool {
-                let shift = value as u8;
-                debug_assert!(shift < (core::mem::size_of::<$atomic>() * 8) as u8);
-                self.0.remove(shift)
+                self.0.remove(value as u8)
             }
 
             #[inline]
             pub fn toggle(&self, value: $typ) {
-                let shift = value as u8;
-                debug_assert!(shift < (core::mem::size_of::<$atomic>() * 8) as u8);
-                self.0.toggle(shift);
-            }
-
-            #[inline]
-            pub fn clear(&self) {
-                self.0.clear();
+                self.0.toggle(value as u8);
             }
 
             #[inline]
@@ -1537,21 +1610,6 @@ macro_rules! atomic_bitflagset {
             }
 
             #[inline]
-            pub fn is_subset(&self, other: &Self) -> bool {
-                self.0.is_subset(&other.0)
-            }
-
-            #[inline]
-            pub fn is_superset(&self, other: &Self) -> bool {
-                self.0.is_superset(&other.0)
-            }
-
-            #[inline]
-            pub fn is_disjoint(&self, other: &Self) -> bool {
-                self.0.is_disjoint(&other.0)
-            }
-
-            #[inline]
             pub fn retain(&self, mut f: impl FnMut($typ) -> bool)
             where
                 $typ: TryFrom<u8>,
@@ -1598,34 +1656,13 @@ macro_rules! atomic_bitflagset {
             }
         }
 
-        impl From<$set> for $name {
-            #[inline]
-            fn from(value: $set) -> Self {
-                Self::from_plain(value)
-            }
-        }
-
-        impl From<&$name> for $set {
-            #[inline]
-            fn from(value: &$name) -> Self {
-                <$set>::from_bits_retain(value.bits())
-            }
-        }
-
-        impl From<$name> for $set {
-            #[inline]
-            fn from(value: $name) -> Self {
-                value.into_plain()
-            }
-        }
-
         impl core::fmt::Debug for $name
         where
             $typ: core::fmt::Debug + TryFrom<u8>,
         {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 f.debug_tuple(stringify!($name))
-                    .field(&format_args!("0x{:x}", self.bits()))
+                    .field(&format_args!("0x{:x}", self.load_bits()))
                     .finish()?;
                 write!(f, "/* elements: [")?;
                 let mut first = true;
@@ -1640,44 +1677,10 @@ macro_rules! atomic_bitflagset {
             }
         }
 
-        impl core::fmt::Binary for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::Binary,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Binary::fmt(&self.bits(), f)
-            }
-        }
-
-        impl core::fmt::Octal for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::Octal,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Octal::fmt(&self.bits(), f)
-            }
-        }
-
-        impl core::fmt::LowerHex for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::LowerHex,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::LowerHex::fmt(&self.bits(), f)
-            }
-        }
-
-        impl core::fmt::UpperHex for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::UpperHex,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::UpperHex::fmt(&self.bits(), f)
-            }
-        }
+        $crate::atomic_bitflagset!(@common $name, $atomic, $set);
     };
 
-    // Internal position form implementation
+    // Position form: element type is u8, delegates directly to AtomicBitSet.
     (@position_impl $vis:vis struct $name:ident($atomic:ty, $set:ty) {
         $($(#[$inner:meta])* const $flag:ident = $value:expr;)*
     }) => {
@@ -1694,13 +1697,6 @@ macro_rules! atomic_bitflagset {
             );
         )*
 
-        impl Default for $name {
-            #[inline]
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-
         #[allow(dead_code, non_upper_case_globals)]
         impl $name {
             $(
@@ -1712,32 +1708,13 @@ macro_rules! atomic_bitflagset {
                 0 $(| ((1 as <$atomic as $crate::__private::radium::Radium>::Item) << $value))*;
 
             #[inline]
+            fn all_bits() -> <$atomic as $crate::__private::radium::Radium>::Item {
+                Self::ALL_MASK
+            }
+
+            #[inline]
             fn from_raw(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Self {
                 Self($crate::AtomicBitSet::<$atomic, u8>::from_bits(<$atomic>::new(bits)))
-            }
-
-            #[inline]
-            pub const fn new() -> Self {
-                Self($crate::AtomicBitSet::<$atomic, u8>::new())
-            }
-
-            #[inline]
-            pub const fn empty() -> Self {
-                Self::new()
-            }
-
-            #[inline]
-            pub fn bits(&self) -> <$atomic as $crate::__private::radium::Radium>::Item {
-                self.0.load_store()
-            }
-
-            #[inline]
-            pub fn from_bits(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Option<Self> {
-                if bits & !Self::ALL_MASK == 0 {
-                    Some(Self::from_raw(bits))
-                } else {
-                    None
-                }
             }
 
             #[inline]
@@ -1746,36 +1723,10 @@ macro_rules! atomic_bitflagset {
             }
 
             #[inline]
-            pub unsafe fn from_bits_unchecked(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Self {
-                Self::from_raw(bits)
-            }
-
-            #[inline]
-            pub fn from_bits_truncate(bits: <$atomic as $crate::__private::radium::Radium>::Item) -> Self {
-                Self::from_raw(bits & Self::ALL_MASK)
-            }
-
-            #[inline]
-            pub fn from_plain(set: $set) -> Self {
-                let bits: <$atomic as $crate::__private::radium::Radium>::Item = set.bits();
-                Self::from_raw(bits)
-            }
-
-            #[inline]
-            pub fn into_plain(self) -> $set {
-                <$set>::from_bits_retain(self.bits())
-            }
-
-            #[inline]
-            pub fn swap_bits(&self, bits: &mut <$atomic as $crate::__private::radium::Radium>::Item) {
-                self.0.swap_store(bits);
-            }
-
-            #[inline]
             pub fn from_element(pos: u8) -> Self {
-                let bits = (core::mem::size_of::<$atomic>() * 8) as u8;
-                debug_assert!(pos < bits);
-                if pos < bits {
+                let max = (core::mem::size_of::<$atomic>() * 8) as u8;
+                debug_assert!(pos < max);
+                if pos < max {
                     Self::from_raw((1 as <$atomic as $crate::__private::radium::Radium>::Item) << pos)
                 } else {
                     Self::empty()
@@ -1793,31 +1744,6 @@ macro_rules! atomic_bitflagset {
                     }
                 }
                 Self::from_raw(raw)
-            }
-
-            #[inline]
-            pub fn all() -> Self {
-                Self::from_raw(Self::ALL_MASK)
-            }
-
-            #[inline]
-            pub fn is_all(&self) -> bool {
-                self.bits() & Self::ALL_MASK == Self::ALL_MASK
-            }
-
-            #[inline]
-            pub fn complement(&self) -> Self {
-                Self::from_raw(Self::ALL_MASK & !self.bits())
-            }
-
-            #[inline]
-            pub fn len(&self) -> usize {
-                self.0.len()
-            }
-
-            #[inline]
-            pub fn is_empty(&self) -> bool {
-                self.0.is_empty()
             }
 
             #[inline]
@@ -1846,11 +1772,6 @@ macro_rules! atomic_bitflagset {
             }
 
             #[inline]
-            pub fn clear(&self) {
-                self.0.clear();
-            }
-
-            #[inline]
             pub fn first(&self) -> Option<u8> {
                 self.0.first()
             }
@@ -1871,21 +1792,6 @@ macro_rules! atomic_bitflagset {
             }
 
             #[inline]
-            pub fn is_subset(&self, other: &Self) -> bool {
-                self.0.is_subset(&other.0)
-            }
-
-            #[inline]
-            pub fn is_superset(&self, other: &Self) -> bool {
-                self.0.is_superset(&other.0)
-            }
-
-            #[inline]
-            pub fn is_disjoint(&self, other: &Self) -> bool {
-                self.0.is_disjoint(&other.0)
-            }
-
-            #[inline]
             pub fn retain(&self, f: impl FnMut(u8) -> bool) {
                 self.0.retain(f);
             }
@@ -1896,7 +1802,7 @@ macro_rules! atomic_bitflagset {
             }
 
             pub fn iter_names(&self) -> impl Iterator<Item = (&'static str, u8)> {
-                let bits = self.bits();
+                let bits = self.load_bits();
                 [
                     $((stringify!($flag), $name::$flag, (1 as <$atomic as $crate::__private::radium::Radium>::Item) << $name::$flag)),*
                 ]
@@ -1906,30 +1812,9 @@ macro_rules! atomic_bitflagset {
             }
         }
 
-        impl From<$set> for $name {
-            #[inline]
-            fn from(value: $set) -> Self {
-                Self::from_plain(value)
-            }
-        }
-
-        impl From<&$name> for $set {
-            #[inline]
-            fn from(value: &$name) -> Self {
-                <$set>::from_bits_retain(value.bits())
-            }
-        }
-
-        impl From<$name> for $set {
-            #[inline]
-            fn from(value: $name) -> Self {
-                value.into_plain()
-            }
-        }
-
         impl core::fmt::Debug for $name {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                let mut remaining = self.bits();
+                let mut remaining = self.load_bits();
                 write!(f, "{}(", stringify!($name))?;
                 let mut first = true;
                 $(
@@ -1954,41 +1839,7 @@ macro_rules! atomic_bitflagset {
             }
         }
 
-        impl core::fmt::Binary for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::Binary,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Binary::fmt(&self.bits(), f)
-            }
-        }
-
-        impl core::fmt::Octal for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::Octal,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Octal::fmt(&self.bits(), f)
-            }
-        }
-
-        impl core::fmt::LowerHex for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::LowerHex,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::LowerHex::fmt(&self.bits(), f)
-            }
-        }
-
-        impl core::fmt::UpperHex for $name
-        where
-            <$atomic as $crate::__private::radium::Radium>::Item: core::fmt::UpperHex,
-        {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                core::fmt::UpperHex::fmt(&self.bits(), f)
-            }
-        }
+        $crate::atomic_bitflagset!(@common $name, $atomic, $set);
     };
 }
 
@@ -2854,7 +2705,10 @@ mod atomic_bitflagset_tests {
     #[test]
     fn atomic_color_set_api_coverage() {
         let empty = AtomicColorSet::empty();
-        assert_eq!(empty.bits(), 0);
+        assert_eq!(
+            empty.as_bits().load(core::sync::atomic::Ordering::Relaxed),
+            0
+        );
         let _ = AtomicColorSet::from_slice(&[Color::Red, Color::Blue]);
 
         let from_plain = AtomicColorSet::from_plain(ColorSet::from_element(Color::Green));
@@ -2865,8 +2719,8 @@ mod atomic_bitflagset_tests {
         assert!(AtomicColorSet::from_bits(0b001).is_some());
         assert!(AtomicColorSet::from_bits(1u8 << 7).is_none());
         assert_eq!(
-            AtomicColorSet::from_bits_truncate(0xFF).bits(),
-            AtomicColorSet::all().bits()
+            ColorSet::from(&AtomicColorSet::from_bits_truncate(0xFF)),
+            ColorSet::from(&AtomicColorSet::all())
         );
 
         let all = AtomicColorSet::all();
