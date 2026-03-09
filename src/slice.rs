@@ -648,3 +648,9 @@ impl<T: PrimInt + BitAndAssign, V> core::fmt::Debug for BitSlice<T, V> {
         f.write_str("}")
     }
 }
+
+impl<T: PrimInt + BitAndAssign, V> core::fmt::Display for BitSlice<T, V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self, f)
+    }
+}

@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::ops::Deref;
 use core::sync::atomic::Ordering;
@@ -34,6 +35,15 @@ where
     }
 }
 
+impl<A: Radium, V> core::fmt::Display for AtomicBoxedBitSet<A, V>
+where
+    A::Item: PrimInt + core::ops::BitAndAssign,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&**self, f)
+    }
+}
+
 impl<A: Radium, V> Deref for AtomicBoxedBitSet<A, V>
 where
     A::Item: PrimInt,
@@ -43,6 +53,15 @@ where
     #[inline]
     fn deref(&self) -> &Self::Target {
         AtomicBitSlice::from_slice_ref(&self.0)
+    }
+}
+
+impl<A: Radium, V> Hash for AtomicBoxedBitSet<A, V>
+where
+    A::Item: Hash + PrimInt,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
     }
 }
 

@@ -1,3 +1,4 @@
+use core::hash::{Hash, Hasher};
 use core::{marker::PhantomData, ops::Deref, sync::atomic::Ordering};
 use num_traits::{AsPrimitive, One, PrimInt, Zero};
 use radium::Radium;
@@ -64,6 +65,25 @@ where
             }
         }
         formatter.finish()
+    }
+}
+
+impl<A: AtomicPrimStore, V> core::fmt::Display for AtomicBitSet<A, V>
+where
+    A::Item: PrimInt + core::ops::BitAndAssign,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let store = self.0.load(Ordering::Relaxed);
+        f.write_str("{")?;
+        let mut first = true;
+        for pos in super::bitset::PrimBitSetIter::<A::Item, usize>(store, PhantomData) {
+            if !first {
+                f.write_str(", ")?;
+            }
+            first = false;
+            write!(f, "{}", pos)?;
+        }
+        f.write_str("}")
     }
 }
 
@@ -407,6 +427,15 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
     }
 }
 
+impl<A: AtomicPrimStore, V> Hash for AtomicBitSet<A, V>
+where
+    A::Item: Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.load(Ordering::Relaxed).hash(state);
+    }
+}
+
 impl<A: AtomicPrimStore, V> core::fmt::Binary for AtomicBitSet<A, V>
 where
     A::Item: PrimInt + core::fmt::Binary,
@@ -464,6 +493,15 @@ where
     }
 }
 
+impl<A: Radium, V, const N: usize> core::fmt::Display for AtomicBitSet<[A; N], V>
+where
+    A::Item: PrimInt + core::ops::BitAndAssign,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&**self, f)
+    }
+}
+
 impl<A: Radium, V, const N: usize> Deref for AtomicBitSet<[A; N], V>
 where
     A::Item: PrimInt,
@@ -473,6 +511,17 @@ where
     #[inline]
     fn deref(&self) -> &Self::Target {
         AtomicBitSlice::from_slice_ref(&self.0)
+    }
+}
+
+impl<A: Radium, V, const N: usize> Hash for AtomicBitSet<[A; N], V>
+where
+    A::Item: Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for a in &self.0 {
+            a.load(Ordering::Relaxed).hash(state);
+        }
     }
 }
 

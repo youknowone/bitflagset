@@ -1,3 +1,4 @@
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::ops::BitAndAssign;
 use core::sync::atomic::Ordering;
@@ -422,6 +423,23 @@ where
     }
 }
 
+impl<A, V> Hash for AtomicBitSlice<A, V>
+where
+    A: Radium,
+    A::Item: Hash + PrimInt,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let effective_len = self
+            .1
+            .iter()
+            .rposition(|a| !a.load(Ordering::Relaxed).is_zero())
+            .map_or(0, |i| i + 1);
+        for a in &self.1[..effective_len] {
+            a.load(Ordering::Relaxed).hash(state);
+        }
+    }
+}
+
 impl<A, V> core::fmt::Debug for AtomicBitSlice<A, V>
 where
     A: Radium,
@@ -443,5 +461,15 @@ where
             }
         }
         f.write_str("}")
+    }
+}
+
+impl<A, V> core::fmt::Display for AtomicBitSlice<A, V>
+where
+    A: Radium,
+    A::Item: PrimInt + BitAndAssign,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self, f)
     }
 }

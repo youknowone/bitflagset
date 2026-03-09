@@ -78,6 +78,12 @@ impl<A: PrimInt + core::ops::BitAndAssign, V> core::fmt::Debug for BoxedBitSet<A
     }
 }
 
+impl<A: PrimInt + core::ops::BitAndAssign, V> core::fmt::Display for BoxedBitSet<A, V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&**self, f)
+    }
+}
+
 impl<'a, A: PrimInt + core::ops::BitAndAssign, V: TryFrom<usize>> IntoIterator
     for &'a BoxedBitSet<A, V>
 {

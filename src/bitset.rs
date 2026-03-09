@@ -156,6 +156,12 @@ impl<A: PrimStore, V> core::fmt::Debug for BitSet<A, V> {
     }
 }
 
+impl<A: PrimStore + core::ops::BitAndAssign, V> core::fmt::Display for BitSet<A, V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&**self, f)
+    }
+}
+
 impl<A: PrimStore, V> BitSet<A, V> {
     const ZERO: Self = Self(A::ZERO, PhantomData);
     const BITS: usize = core::mem::size_of::<A>() * 8;
@@ -768,6 +774,14 @@ impl<T: PrimInt, V, const N: usize> core::fmt::Debug for BitSet<[T; N], V> {
             }
         }
         formatter.finish()
+    }
+}
+
+impl<T: PrimInt + core::ops::BitAndAssign, V, const N: usize> core::fmt::Display
+    for BitSet<[T; N], V>
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&**self, f)
     }
 }
 

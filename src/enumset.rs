@@ -459,6 +459,26 @@ macro_rules! bitflagset {
             }
         }
 
+        impl core::fmt::Display for $name
+        where
+            $typ: $crate::BitFlag,
+        {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let mut first = true;
+                for (name, _) in self.iter_names() {
+                    if !first {
+                        f.write_str(" | ")?;
+                    }
+                    f.write_str(name)?;
+                    first = false;
+                }
+                if first {
+                    f.write_str("(empty)")?;
+                }
+                Ok(())
+            }
+        }
+
         #[allow(dead_code)]
         impl $name {
             #[inline]
@@ -701,6 +721,15 @@ macro_rules! bitflagset {
                         None
                     }
                 })
+            }
+
+            pub fn from_name(name: &str) -> Option<Self>
+            where
+                $typ: $crate::BitFlag,
+            {
+                <$typ as $crate::BitFlag>::FLAGS.iter()
+                    .find(|f| f.name() == name)
+                    .map(|f| Self::from_element(*f.value()))
             }
         }
 
@@ -1092,6 +1121,13 @@ macro_rules! bitflagset {
                 .filter(move |(_, _, mask)| bits & *mask != 0)
                 .map(|(name, pos, _)| (name, pos))
             }
+
+            pub fn from_name(name: &str) -> Option<Self> {
+                match name {
+                    $(stringify!($flag) => Some(Self::from_element($name::$flag)),)*
+                    _ => None,
+                }
+            }
         }
 
         impl core::fmt::Debug for $name {
@@ -1117,6 +1153,23 @@ macro_rules! bitflagset {
                     write!(f, "empty")?;
                 }
                 write!(f, ")")
+            }
+        }
+
+        impl core::fmt::Display for $name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let mut first = true;
+                for (name, _) in self.iter_names() {
+                    if !first {
+                        f.write_str(" | ")?;
+                    }
+                    f.write_str(name)?;
+                    first = false;
+                }
+                if first {
+                    f.write_str("(empty)")?;
+                }
+                Ok(())
             }
         }
 
@@ -1654,6 +1707,15 @@ macro_rules! atomic_bitflagset {
                     }
                 })
             }
+
+            pub fn from_name(name: &str) -> Option<Self>
+            where
+                $typ: $crate::BitFlag,
+            {
+                <$typ as $crate::BitFlag>::FLAGS.iter()
+                    .find(|f| f.name() == name)
+                    .map(|f| Self::from_element(*f.value()))
+            }
         }
 
         impl core::fmt::Debug for $name
@@ -1674,6 +1736,26 @@ macro_rules! atomic_bitflagset {
                     first = false;
                 }
                 write!(f, "] */")
+            }
+        }
+
+        impl core::fmt::Display for $name
+        where
+            $typ: $crate::BitFlag,
+        {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let mut first = true;
+                for (name, _) in self.iter_names() {
+                    if !first {
+                        f.write_str(" | ")?;
+                    }
+                    f.write_str(name)?;
+                    first = false;
+                }
+                if first {
+                    f.write_str("(empty)")?;
+                }
+                Ok(())
             }
         }
 
@@ -1810,6 +1892,13 @@ macro_rules! atomic_bitflagset {
                 .filter(move |(_, _, mask)| bits & *mask != 0)
                 .map(|(name, pos, _)| (name, pos))
             }
+
+            pub fn from_name(name: &str) -> Option<Self> {
+                match name {
+                    $(stringify!($flag) => Some(Self::from_element($name::$flag)),)*
+                    _ => None,
+                }
+            }
         }
 
         impl core::fmt::Debug for $name {
@@ -1836,6 +1925,23 @@ macro_rules! atomic_bitflagset {
                     write!(f, "empty")?;
                 }
                 write!(f, ")")
+            }
+        }
+
+        impl core::fmt::Display for $name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let mut first = true;
+                for (name, _) in self.iter_names() {
+                    if !first {
+                        f.write_str(" | ")?;
+                    }
+                    f.write_str(name)?;
+                    first = false;
+                }
+                if first {
+                    f.write_str("(empty)")?;
+                }
+                Ok(())
             }
         }
 
