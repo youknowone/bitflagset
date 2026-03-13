@@ -29,13 +29,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --workspace --locked
+        run: cargo build --workspace
 
       - name: Test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace
 
       - name: Test (all features)
-        run: cargo test --workspace --all-features --locked
+        run: cargo test --workspace --all-features
 
       - name: Clippy
-        run: cargo clippy --workspace --all-features --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings

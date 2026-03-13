@@ -12,24 +12,12 @@ mod sealed {
     use core::sync::atomic::*;
     use radium::Radium;
 
-    pub trait AtomicPrimStore: Radium {
-        const ZERO: Self;
-    }
-    impl AtomicPrimStore for AtomicU8 {
-        const ZERO: Self = AtomicU8::new(0);
-    }
-    impl AtomicPrimStore for AtomicU16 {
-        const ZERO: Self = AtomicU16::new(0);
-    }
-    impl AtomicPrimStore for AtomicU32 {
-        const ZERO: Self = AtomicU32::new(0);
-    }
-    impl AtomicPrimStore for AtomicU64 {
-        const ZERO: Self = AtomicU64::new(0);
-    }
-    impl AtomicPrimStore for AtomicUsize {
-        const ZERO: Self = AtomicUsize::new(0);
-    }
+    pub trait AtomicPrimStore: Radium {}
+    impl AtomicPrimStore for AtomicU8 {}
+    impl AtomicPrimStore for AtomicU16 {}
+    impl AtomicPrimStore for AtomicU32 {}
+    impl AtomicPrimStore for AtomicU64 {}
+    impl AtomicPrimStore for AtomicUsize {}
 }
 pub use sealed::AtomicPrimStore;
 
@@ -96,7 +84,8 @@ impl<A: AtomicPrimStore, V> Default for AtomicBitSet<A, V> {
 
 impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
     const BITS: usize = core::mem::size_of::<A>() * 8;
-    const ZERO: Self = Self(A::ZERO, PhantomData);
+    // SAFETY: All-zeros is a valid representation for atomic integers.
+    const ZERO: Self = Self(unsafe { core::mem::zeroed() }, PhantomData);
 
     #[inline]
     pub const fn new() -> Self {

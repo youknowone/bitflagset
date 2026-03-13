@@ -803,7 +803,7 @@ impl<T: PrimInt + core::fmt::Octal, V, const N: usize> core::fmt::Octal for BitS
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // Octal doesn't align cleanly to word boundaries, format as combined value
         // by formatting each word with zero-padding
-        let width = (core::mem::size_of::<T>() * 8 + 2) / 3; // ceil(bits/3)
+        let width = (core::mem::size_of::<T>() * 8).div_ceil(3);
         for (i, &word) in self.0.iter().enumerate().rev() {
             if i == N - 1 {
                 core::fmt::Octal::fmt(&word, f)?;
@@ -1054,40 +1054,38 @@ mod tests {
         );
     }
 
-    const SET: BitSet<u64, usize> = BitSet::<u64, usize>::from_indices(&[3, 7, 42]);
-    const RAW: BitSet<u64, usize> = BitSet::<u64, usize>::from_bits(0b1010);
-    const SINGLE: BitSet<u64, usize> = BitSet::<u64, usize>::from_index(5);
-    const EMPTY: BitSet<u64, usize> = BitSet::<u64, usize>::new();
+    const _: () = {
+        let set: BitSet<u64, usize> = BitSet::<u64, usize>::from_indices(&[3, 7, 42]);
+        let raw: BitSet<u64, usize> = BitSet::<u64, usize>::from_bits(0b1010);
+        let single: BitSet<u64, usize> = BitSet::<u64, usize>::from_index(5);
+        let empty: BitSet<u64, usize> = BitSet::<u64, usize>::new();
+        let superset: BitSet<u64, usize> = BitSet::<u64, usize>::from_indices(&[3, 7, 42, 50]);
+        let disjoint: BitSet<u64, usize> = BitSet::<u64, usize>::from_indices(&[0, 1]);
 
-    // from_bits / bits
-    const _: () = assert!(RAW.bits() == 0b1010);
+        assert!(raw.bits() == 0b1010);
 
-    // from_indices / from_index
-    const _: () = assert!(SET.contains(&3));
-    const _: () = assert!(SET.contains(&7));
-    const _: () = assert!(SET.contains(&42));
-    const _: () = assert!(!SET.contains(&0));
-    const _: () = assert!(SINGLE.contains(&5));
-    const _: () = assert!(!SINGLE.contains(&4));
+        assert!(set.contains(&3));
+        assert!(set.contains(&7));
+        assert!(set.contains(&42));
+        assert!(!set.contains(&0));
+        assert!(single.contains(&5));
+        assert!(!single.contains(&4));
 
-    // len / is_empty
-    const _: () = assert!(SET.len() == 3);
-    const _: () = assert!(RAW.len() == 2);
-    const _: () = assert!(SINGLE.len() == 1);
-    const _: () = assert!(EMPTY.is_empty());
-    const _: () = assert!(!SET.is_empty());
-    const _: () = assert!(EMPTY.is_empty());
+        assert!(set.len() == 3);
+        assert!(raw.len() == 2);
+        assert!(single.len() == 1);
+        assert!(empty.is_empty());
+        assert!(!set.is_empty());
+        assert!(empty.is_empty());
 
-    // is_subset / is_superset / is_disjoint
-    const SUPERSET: BitSet<u64, usize> = BitSet::<u64, usize>::from_indices(&[3, 7, 42, 50]);
-    const DISJOINT: BitSet<u64, usize> = BitSet::<u64, usize>::from_indices(&[0, 1]);
-    const _: () = assert!(SET.is_subset(&SUPERSET));
-    const _: () = assert!(!SUPERSET.is_subset(&SET));
-    const _: () = assert!(SUPERSET.is_superset(&SET));
-    const _: () = assert!(!SET.is_superset(&SUPERSET));
-    const _: () = assert!(SET.is_disjoint(&DISJOINT));
-    const _: () = assert!(!SET.is_disjoint(&SUPERSET));
-    const _: () = assert!(EMPTY.is_disjoint(&SET));
+        assert!(set.is_subset(&superset));
+        assert!(!superset.is_subset(&set));
+        assert!(superset.is_superset(&set));
+        assert!(!set.is_superset(&superset));
+        assert!(set.is_disjoint(&disjoint));
+        assert!(!set.is_disjoint(&superset));
+        assert!(empty.is_disjoint(&set));
+    };
 
     // ── Runtime verification (same methods, non‐const path) ─
 

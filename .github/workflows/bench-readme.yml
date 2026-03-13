@@ -38,7 +38,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run vs_bitvec benchmarks
-        run: cargo bench --bench vs_bitvec --locked
+        run: cargo bench --bench vs_bitvec
 
       - name: Check README benchmark tables
         id: readme_check
@@ -124,4 +124,4 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run vs_bitflags benchmarks
-        run: cargo bench --bench vs_bitflags --locked -- --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2
+        run: cargo bench --bench vs_bitflags -- --sample-size 20 --warm-up-time 0.1 --measurement-time 0.2
