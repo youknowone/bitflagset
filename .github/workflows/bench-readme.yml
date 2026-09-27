@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   vs-bitvec-readme:
-    name: vs_bitvec + README check
+    name: vs_bitvec + vs_bit_set + README check
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +39,9 @@ jobs:
 
       - name: Run vs_bitvec benchmarks
         run: cargo bench --bench vs_bitvec
+
+      - name: Run vs_bit_set benchmarks
+        run: cargo bench --bench vs_bit_set
 
       - name: Check README benchmark tables
         id: readme_check
@@ -69,6 +72,7 @@ jobs:
             Run the following locally and commit the updated README:
             \`\`\`bash
             cargo bench --bench vs_bitvec
+            cargo bench --bench vs_bit_set
             scripts/update_readme_bench.sh
             \`\`\`
 
