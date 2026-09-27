@@ -1173,6 +1173,7 @@ mod tests {
         assert!(!set.contains(&Color::Red));
         let v: Vec<Color> = set.iter().collect();
         assert_eq!(v, vec![Color::Green]);
+        #[cfg(feature = "alloc")]
         assert_eq!(set.to_vec(), vec![Color::Green]);
 
         // trait method calls
@@ -1184,6 +1185,7 @@ mod tests {
         assert!(BitFlagSet::contains(&set2, &Color::Blue));
         let v2: Vec<Color> = BitFlagSet::iter(&set2).collect();
         assert_eq!(v2, vec![Color::Blue]);
+        #[cfg(feature = "alloc")]
         assert_eq!(BitFlagSet::to_vec(&set2), vec![Color::Blue]);
 
         // insert / remove
