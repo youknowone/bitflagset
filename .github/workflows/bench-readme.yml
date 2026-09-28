@@ -157,22 +157,13 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      - name: Record uptime before benchmarks
-        run: uptime | sed 's/^ *//' > "${RUNNER_TEMP}/uptime-before.txt"
-
       - name: Run compare benchmarks
         run: cargo bench --bench compare
-
-      - name: Record uptime after benchmarks
-        run: uptime | sed 's/^ *//' > "${RUNNER_TEMP}/uptime-after.txt"
 
       - name: Regenerate README benchmark tables
         id: readme
         run: |
           set -euo pipefail
-          BITFLAGSET_UPTIME_BEFORE="$(cat "${RUNNER_TEMP}/uptime-before.txt")"
-          BITFLAGSET_UPTIME_AFTER="$(cat "${RUNNER_TEMP}/uptime-after.txt")"
-          export BITFLAGSET_UPTIME_BEFORE BITFLAGSET_UPTIME_AFTER
           scripts/update_readme_bench.sh
           scripts/update_readme_bench.sh --check
           if git diff --quiet -- README.md; then

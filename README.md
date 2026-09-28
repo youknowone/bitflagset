@@ -16,17 +16,8 @@ Type-safe bitsets with `Set`-like ergonomics. Operations are direct primitive bi
 
 ## Performance
 
-Benchmark numbers in the tables below come from CI, not from a local machine. Dispatch the [Bench Readme](.github/workflows/bench-readme.yml) workflow (`workflow_dispatch`) on the branch that should receive them:
-
-```bash
-gh workflow run bench-readme.yml --ref <branch>
-```
-
-The workflow opens a pull request from `bench-readme-update` when `README.md` changes.
-
 <!-- BENCH_TABLES:BEGIN -->
-All numbers below are Criterion medians from `cargo bench --bench compare`, run on Apple M-series (AArch64), collected on **2026-09-28**. This is a shared-machine measurement.  
-Load at bench time: before `16:18  up 4 days, 16:38, 52 users, load averages: 35.95 33.19 42.89`; after `16:28  up 4 days, 16:48, 52 users, load averages: 42.79 36.24 40.45`.
+All numbers below are Criterion medians from `cargo bench --bench compare`, collected on **2026-09-28**.
 Each competitor is two columns: its median, then `×` = `their time / bitflagset` on the **printed** times (one decimal, or an integer at 100 or above, e.g. `2.3×`, `1202×`). The bitflagset time and every competitor in that row come from the same Criterion group. A ratio in italics is a row where bitflagset's raw median is slower. `—` means that library has no equivalent in the bench. A column pair that is `—` on every row is dropped, and a row with no competitor value is dropped.  
 `iter`, `union`, `intersection`, and `difference` count iterator items. `insert`, `remove`, `set`, `set_false`, `clear`, `union_with` / `or`, `intersect_with` / `and`, and `difference_with` clone the destination in `iter_batched_ref` setup and time only the operation. Those in-place ops borrow the other set (`union_from`, `intersect_from`, `difference_from`), matching bit-set `*_with` and bit-vec `or` / `and` / `difference`. Fixed-size rows use `BatchSize::SmallInput`; the 65536-bit rows use `BatchSize::LargeInput`. `len` / `count` is `len` / `count` / `count_ones`. `clear` is `clear` / `make_empty` / `fill(false)`. `contains` / `get` is `contains` / `get`. bitvec `bitor` / `bitand` / `bitxor` / `not` are by-value operators that build a new set. Atomic `insert` builds a fresh set and sets one bit (`set_aliased` on bitvec). On the 256/1024/65536 tables, `(absent)` uses a clear bit and `(present)` uses a set bit.
 

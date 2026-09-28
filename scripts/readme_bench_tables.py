@@ -318,8 +318,6 @@ def section(tables, specs, kind_note):
 def render():
     MISSING.clear()
     date = os.environ["BENCH_DATE"]
-    load = os.environ["BENCH_LOAD"]
-    machine = os.environ["BENCH_MACHINE"]
     non_atomic, slow_na = section(
         NON_ATOMIC_TABLES,
         NON_ATOMIC_ROWS,
@@ -335,8 +333,7 @@ def render():
         "so those columns are omitted.",
     )
     ensure_complete()
-    intro = f"""All numbers below are Criterion medians from `cargo bench --bench compare`, run on {machine}, collected on **{date}**. This is a shared-machine measurement.  
-{load}
+    intro = f"""All numbers below are Criterion medians from `cargo bench --bench compare`, collected on **{date}**.
 Each competitor is two columns: its median, then `×` = `their time / bitflagset` on the **printed** times (one decimal, or an integer at 100 or above, e.g. `2.3×`, `1202×`). The bitflagset time and every competitor in that row come from the same Criterion group. A ratio in italics is a row where bitflagset's raw median is slower. `—` means that library has no equivalent in the bench. A column pair that is `—` on every row is dropped, and a row with no competitor value is dropped.  
 `iter`, `union`, `intersection`, and `difference` count iterator items. `insert`, `remove`, `set`, `set_false`, `clear`, `union_with` / `or`, `intersect_with` / `and`, and `difference_with` clone the destination in `iter_batched_ref` setup and time only the operation. Those in-place ops borrow the other set (`union_from`, `intersect_from`, `difference_from`), matching bit-set `*_with` and bit-vec `or` / `and` / `difference`. Fixed-size rows use `BatchSize::SmallInput`; the 65536-bit rows use `BatchSize::LargeInput`. `len` / `count` is `len` / `count` / `count_ones`. `clear` is `clear` / `make_empty` / `fill(false)`. `contains` / `get` is `contains` / `get`. bitvec `bitor` / `bitand` / `bitxor` / `not` are by-value operators that build a new set. Atomic `insert` builds a fresh set and sets one bit (`set_aliased` on bitvec). On the 256/1024/65536 tables, `(absent)` uses a clear bit and `(present)` uses a set bit.
 
@@ -548,7 +545,7 @@ That `workflow_dispatch` run benches on a GitHub-hosted runner and opens a pull 
 - rustc: {rustc}
 - Commit: `{sha}`
 
-These numbers come from a GitHub-hosted runner and are not comparable to the README's Apple M-series numbers.
+These numbers come from a GitHub-hosted runner. Runner numbers vary between runs.
 
 bitflagset is faster in {faster} rows and slower in {slower} rows. Slower rows are expected to be noisy on shared runners.
 
@@ -612,8 +609,8 @@ def self_test():
     tmp = tempfile.mkdtemp(prefix="readme-bench-")
     ROOT = tmp
     os.environ["BENCH_DATE"] = "2026-09-28"
-    os.environ["BENCH_LOAD"] = "Load at bench time: before `a`; after `b`."
-    os.environ["BENCH_MACHINE"] = "Test CPU (Darwin arm64)"
+    os.environ.pop("BENCH_LOAD", None)
+    os.environ.pop("BENCH_MACHINE", None)
     try:
         declared = []
         for _size, _storage, group in NON_ATOMIC_TABLES:
@@ -631,10 +628,19 @@ def self_test():
         for group, bench, _label in declared:
             _write_estimate(group, bench, 10.0)
         text = render()
-        if "Test CPU (Darwin arm64)" not in text:
-            _fail("machine label was not written")
-        if "Apple M-series" in text:
-            _fail("machine label is still hardcoded")
+        intro = text.split("### Non-atomic", 1)[0]
+        if "collected on **2026-09-28**." not in intro:
+            _fail("date was not written into the intro")
+        folded = intro.lower()
+        if "machine" in folded or "load" in folded or "uptime" in folded:
+            _fail("intro still mentions machine or load")
+        comment = render_comment(True)
+        if "Apple M-series" in comment or "not comparable" in comment:
+            _fail("comment still compares against Apple M-series numbers")
+        if "Runner numbers vary between runs." not in comment:
+            _fail("comment does not say runner numbers vary between runs")
+        if "README tables are stale" not in comment:
+            _fail("stale notice missing")
         if "`index`" not in text:
             _fail("index row missing from a complete run")
         if "insert` row is omitted" in text:

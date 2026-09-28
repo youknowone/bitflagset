@@ -13,7 +13,7 @@ and updates the README benchmark table block delimited by:
   <!-- BENCH_TABLES:BEGIN -->
   <!-- BENCH_TABLES:END -->
 
-README benchmark numbers are published from CI, not from a local machine.
+README benchmark numbers are published from CI.
 Dispatch the Bench Readme workflow on the branch that should receive them:
 
   gh workflow run bench-readme.yml --ref <branch>
@@ -28,17 +28,11 @@ at 100 or above). The script exits non-zero if a printed ratio does not
 match those times, or if a declared benchmark has no Criterion result.
 
   --check            Byte-for-byte compare against the Criterion data in
-                     `target/criterion`. Keeps the README date, load line,
-                     and machine label.
-  --check-structure  Host-independent check. Same preserved notes, but only
+                     `target/criterion`. Keeps the README date.
+  --check-structure  Host-independent check. The date is preserved, but only
                      tables, row and column sets, and ratio consistency are
                      compared. Printed times may differ. Exits 1 on a
                      structural mismatch and 2 when a measurement is missing.
-
-Optional environment variables for the load note (ignored by either check,
-which keeps the existing line):
-  BITFLAGSET_UPTIME_BEFORE
-  BITFLAGSET_UPTIME_AFTER
 EOF
 }
 
@@ -93,78 +87,6 @@ block_date() {
     date +%F
 }
 
-existing_machine() {
-    awk -v start="${START_MARKER}" -v end="${END_MARKER}" '
-        $0 == start { in_block = 1; next }
-        $0 == end { in_block = 0 }
-        in_block && match($0, /run on .+\, collected on/) {
-            label = substr($0, RSTART + 7, RLENGTH - 7 - 14)
-            print label
-            exit
-        }
-    ' "${README_PATH}"
-}
-
-detect_machine() {
-    local os arch cpu
-    os="$(uname -s)"
-    arch="$(uname -m)"
-    case "${os}" in
-        Darwin)
-            cpu="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)"
-            ;;
-        Linux)
-            if command -v lscpu >/dev/null 2>&1; then
-                cpu="$(lscpu | awk -F: '/^[Mm]odel name:/ { gsub(/^[ \t]+/, "", $2); print $2; exit }')"
-            fi
-            ;;
-    esac
-    if [[ -z "${cpu}" ]]; then
-        echo "Could not detect the CPU model (macOS: sysctl machdep.cpu.brand_string, Linux: lscpu model name)." >&2
-        exit 1
-    fi
-    printf '%s (%s %s)\n' "${cpu}" "${os}" "${arch}"
-}
-
-machine_label() {
-    if [[ "${CHECK_MODE}" -eq 1 ]]; then
-        local existing
-        existing="$(existing_machine || true)"
-        if [[ -z "${existing}" ]]; then
-            echo "README benchmark block has no machine label to preserve." >&2
-            exit 1
-        fi
-        printf '%s\n' "${existing}"
-        return
-    fi
-    detect_machine
-}
-
-load_line() {
-    if [[ "${CHECK_MODE}" -eq 1 ]]; then
-        local existing
-        existing="$(awk -v start="${START_MARKER}" -v end="${END_MARKER}" '
-            $0 == start { in_block = 1; next }
-            $0 == end { in_block = 0 }
-            in_block && /^Load at bench time:/ { print; exit }
-        ' "${README_PATH}")"
-        if [[ -n "${existing}" ]]; then
-            printf '%s\n' "${existing}"
-            return
-        fi
-    fi
-    local before after
-    before="${BITFLAGSET_UPTIME_BEFORE:-}"
-    after="${BITFLAGSET_UPTIME_AFTER:-}"
-    if [[ -z "${before}" ]]; then
-        before="$(uptime | sed 's/^ *//')"
-    fi
-    if [[ -z "${after}" ]]; then
-        after="$(uptime | sed 's/^ *//')"
-    fi
-    printf 'Load at bench time: before `%s`; after `%s`.\n' "${before}" "${after}"
-}
-
 replace_block() {
     local input="$1"
     local output="$2"
@@ -214,9 +136,7 @@ readme_block_tmp="$(mktemp)"
 trap 'rm -f "${block_tmp}" "${readme_tmp}" "${readme_block_tmp}"' EXIT
 
 BENCH_DATE="$(block_date)"
-BENCH_LOAD="$(load_line)"
-BENCH_MACHINE="$(machine_label)"
-export REPO_ROOT BENCH_DATE BENCH_LOAD BENCH_MACHINE
+export REPO_ROOT BENCH_DATE
 python3 "${SCRIPT_DIR}/readme_bench_tables.py" > "${block_tmp}"
 replace_block "${README_PATH}" "${readme_tmp}" "${block_tmp}"
 
