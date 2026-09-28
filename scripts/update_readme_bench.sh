@@ -13,14 +13,23 @@ and updates the README benchmark table block delimited by:
   <!-- BENCH_TABLES:BEGIN -->
   <!-- BENCH_TABLES:END -->
 
+README benchmark numbers are published from CI, not from a local machine.
+Dispatch the Bench Readme workflow on the branch that should receive them:
+
+  gh workflow run bench-readme.yml --ref <branch>
+
+That workflow_dispatch job runs this script on a GitHub-hosted runner, then
+runs `--check`, and opens a pull request from bench-readme-update when
+README.md changes.
+
 Each competitor is a time column plus a × column. The printed ratio is
 competitor/bitflagset from the printed times (one decimal, or an integer
 at 100 or above). The script exits non-zero if a printed ratio does not
 match those times, or if a declared benchmark has no Criterion result.
 
-  --check            Byte-for-byte compare. Keeps the README date, load
-                     line, and machine label. Use this on the machine that
-                     produced the committed numbers.
+  --check            Byte-for-byte compare against the Criterion data in
+                     `target/criterion`. Keeps the README date, load line,
+                     and machine label.
   --check-structure  Host-independent check. Same preserved notes, but only
                      tables, row and column sets, and ratio consistency are
                      compared. Printed times may differ. Exits 1 on a
@@ -226,7 +235,8 @@ if [[ "${CHECK_MODE}" -eq 1 ]]; then
         echo "README benchmark tables are up to date."
         exit 0
     fi
-    echo "README benchmark tables are stale. Run: scripts/update_readme_bench.sh" >&2
+    echo "README benchmark tables do not match the Criterion data in target/criterion." >&2
+    echo "Dispatch the Bench Readme workflow (workflow_dispatch) to regenerate README.md." >&2
     diff -u "${README_PATH}" "${readme_tmp}" || true
     exit 1
 fi

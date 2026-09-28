@@ -532,12 +532,13 @@ def render_comment(readme_stale):
     stale_block = ""
     if readme_stale:
         stale_block = """
-**README tables are stale** relative to the committed data layout. Regenerate and commit:
+**README tables are stale** relative to the committed data layout. Regenerate them by dispatching the Bench Readme workflow (numbers from a local machine are not published):
 
 ```bash
-cargo bench --bench compare
-scripts/update_readme_bench.sh
+gh workflow run bench-readme.yml --ref <branch>
 ```
+
+That `workflow_dispatch` run benches on a GitHub-hosted runner and opens a pull request from `bench-readme-update` when `README.md` changes.
 """
     body = f"""{COMMENT_MARKER}
 ## bitflagset benchmark report

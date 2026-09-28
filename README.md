@@ -16,6 +16,14 @@ Type-safe bitsets with `Set`-like ergonomics. Operations are direct primitive bi
 
 ## Performance
 
+Benchmark numbers in the tables below come from CI, not from a local machine. Dispatch the [Bench Readme](.github/workflows/bench-readme.yml) workflow (`workflow_dispatch`) on the branch that should receive them:
+
+```bash
+gh workflow run bench-readme.yml --ref <branch>
+```
+
+The workflow opens a pull request from `bench-readme-update` when `README.md` changes.
+
 <!-- BENCH_TABLES:BEGIN -->
 All numbers below are Criterion medians from `cargo bench --bench compare`, run on Apple M-series (AArch64), collected on **2026-09-28**. This is a shared-machine measurement.  
 Load at bench time: before `16:18  up 4 days, 16:38, 52 users, load averages: 35.95 33.19 42.89`; after `16:28  up 4 days, 16:48, 52 users, load averages: 42.79 36.24 40.45`.
