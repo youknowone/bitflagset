@@ -117,6 +117,42 @@ mod tests {
     use proptest::prelude::*;
 
     #[test]
+    fn index_reads_set_bit() {
+        let bs = AtomicBoxedBitSet::<AtomicU64, usize>::with_capacity(256);
+        bs.insert(200);
+        assert!(bs[200]);
+        assert!(!bs[1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn index_out_of_range() {
+        let bs = AtomicBoxedBitSet::<AtomicU64, usize>::with_capacity(256);
+        let _ = bs[256];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn contains_out_of_range() {
+        let bs = AtomicBoxedBitSet::<AtomicU64, usize>::with_capacity(256);
+        let _ = bs.contains(&256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn insert_out_of_range() {
+        let bs = AtomicBoxedBitSet::<AtomicU64, usize>::with_capacity(256);
+        let _ = bs.insert(256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn remove_out_of_range() {
+        let bs = AtomicBoxedBitSet::<AtomicU64, usize>::with_capacity(256);
+        let _ = bs.remove(256);
+    }
+
+    #[test]
     fn test_boxed_basic() {
         let bs = AtomicBoxedBitSet::<AtomicU64, usize>::with_capacity(256);
         assert!(bs.is_empty());

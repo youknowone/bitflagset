@@ -95,6 +95,12 @@ mod sealed {
 }
 pub use sealed::PrimStore;
 
+/// Bitset stored in one primitive or a fixed array of primitives.
+///
+/// Out-of-range indices panic in every build from `contains` / `insert` /
+/// `remove` / `set` / `toggle` / `Index`, with
+/// `index {idx} out of range for capacity {cap}`. Const `contains` panics with
+/// the literal `index out of range for capacity` (formatting is not const).
 #[repr(transparent)]
 #[derive(Clone, Copy, RefCast)]
 pub struct BitSet<A, V>(pub(crate) A, #[trivial] pub(crate) PhantomData<V>);
@@ -235,18 +241,11 @@ impl<A: PrimStore, V> BitSet<A, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
-            return;
-        }
+        crate::__private::check_bit_index(idx, Self::BITS);
         let bit = A::one().unsigned_shl(idx as u32);
         if value {
             self.0 = self.0 | bit;
-        } else {
+        } else if self.0 & bit != A::zero() {
             self.0 = self.0 & !bit;
         }
     }
@@ -257,14 +256,7 @@ impl<A: PrimStore, V> BitSet<A, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
-            return false;
-        }
+        crate::__private::check_bit_index(idx, Self::BITS);
         let bit = A::one().unsigned_shl(idx as u32);
         let was_absent = self.0 & bit == A::zero();
         self.0 = self.0 | bit;
@@ -277,18 +269,13 @@ impl<A: PrimStore, V> BitSet<A, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
+        crate::__private::check_bit_index(idx, Self::BITS);
+        let bit = A::one().unsigned_shl(idx as u32);
+        if self.0 & bit == A::zero() {
             return false;
         }
-        let bit = A::one().unsigned_shl(idx as u32);
-        let was_present = self.0 & bit != A::zero();
         self.0 = self.0 & !bit;
-        was_present
+        true
     }
 
     #[inline]
@@ -297,14 +284,7 @@ impl<A: PrimStore, V> BitSet<A, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
-            return;
-        }
+        crate::__private::check_bit_index(idx, Self::BITS);
         self.0 = self.0 ^ A::one().unsigned_shl(idx as u32);
     }
 
@@ -467,8 +447,14 @@ macro_rules! impl_bitset_const {
             }
 
             /// Const constructor from a single bit index.
+            ///
+            /// Panics if `idx` is outside the primitive width. The message is a
+            /// literal because formatting is not available in `const fn`.
             #[inline]
             pub const fn from_index(idx: usize) -> Self {
+                if idx >= core::mem::size_of::<$ty>() * 8 {
+                    panic!("index out of range for capacity");
+                }
                 Self::from_bits((1 as $ty) << idx)
             }
 
@@ -497,7 +483,11 @@ macro_rules! impl_bitset_const {
             /// Const bit-index membership test.
             #[inline]
             pub const fn contains(&self, idx: &usize) -> bool {
-                self.0 & ((1 as $ty) << *idx) != 0
+                let idx = *idx;
+                if idx >= core::mem::size_of::<$ty>() * 8 {
+                    panic!("index out of range for capacity");
+                }
+                self.0 & ((1 as $ty) << idx) != 0
             }
 
             #[inline]
@@ -871,9 +861,17 @@ where
 {
     #[inline]
     fn bitor_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] |= rhs.0[i];
-        }
+        self.union_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::BitOrAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + core::ops::BitOrAssign + Copy,
+{
+    #[inline]
+    fn bitor_assign(&mut self, rhs: &Self) {
+        self.union_from(rhs);
     }
 }
 
@@ -894,9 +892,17 @@ where
 {
     #[inline]
     fn bitand_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] &= rhs.0[i];
-        }
+        self.intersect_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::BitAndAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + core::ops::BitAndAssign + Copy,
+{
+    #[inline]
+    fn bitand_assign(&mut self, rhs: &Self) {
+        self.intersect_from(rhs);
     }
 }
 
@@ -917,9 +923,17 @@ where
 {
     #[inline]
     fn bitxor_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] ^= rhs.0[i];
-        }
+        self.symmetric_difference_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::BitXorAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + core::ops::BitXorAssign + Copy,
+{
+    #[inline]
+    fn bitxor_assign(&mut self, rhs: &Self) {
+        self.symmetric_difference_from(rhs);
     }
 }
 
@@ -951,9 +965,17 @@ where
 {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] &= !rhs.0[i];
-        }
+        self.difference_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::SubAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + Copy + core::ops::Not<Output = T> + core::ops::BitAndAssign,
+{
+    #[inline]
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.difference_from(rhs);
     }
 }
 
@@ -1030,7 +1052,7 @@ impl<T: PrimStore + core::ops::BitOrAssign + Copy, V, const N: usize>
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod tests {
     use super::*;
     use alloc::vec;
@@ -1052,6 +1074,102 @@ mod tests {
             core::mem::size_of::<BitSet<u8, i32>>(),
             core::mem::size_of::<u8>()
         );
+    }
+
+    #[test]
+    fn index_reads_set_bit() {
+        let mut prim = BitSet::<u64, usize>::new();
+        prim.insert(5);
+        assert!(prim[5]);
+        assert!(!prim[4]);
+
+        let raw = [1u64 << 3];
+        let slice = BitSlice::<u64, usize>::from_slice_ref(&raw);
+        assert!(slice[3]);
+        assert!(!slice[0]);
+
+        let mut array = BitSet::<[u64; 4], usize>::new();
+        array.insert(200);
+        assert!(array[200]);
+        assert!(!array[1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn index_prim_out_of_range() {
+        let prim = BitSet::<u64, usize>::new();
+        let _ = prim[64];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn index_slice_out_of_range() {
+        let raw = [0u64];
+        let slice = BitSlice::<u64, usize>::from_slice_ref(&raw);
+        let _ = slice[64];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn index_array_out_of_range() {
+        let array = BitSet::<[u64; 4], usize>::new();
+        let _ = array[256];
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of range for capacity")]
+    fn contains_prim_out_of_range() {
+        let prim = BitSet::<u64, usize>::new();
+        let _ = prim.contains(&64);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn insert_prim_out_of_range() {
+        let mut prim = BitSet::<u64, usize>::new();
+        let _ = prim.insert(64);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn remove_prim_out_of_range() {
+        let mut prim = BitSet::<u64, usize>::new();
+        let _ = prim.remove(64);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn contains_array_out_of_range() {
+        let array = BitSet::<[u64; 4], usize>::new();
+        let _ = array.contains(&256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn insert_array_out_of_range() {
+        let mut array = BitSet::<[u64; 4], usize>::new();
+        let _ = array.insert(256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn remove_array_out_of_range() {
+        let mut array = BitSet::<[u64; 4], usize>::new();
+        let _ = array.remove(256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn set_array_out_of_range() {
+        let mut array = BitSet::<[u64; 4], usize>::new();
+        array.set(256, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn toggle_array_out_of_range() {
+        let mut array = BitSet::<[u64; 4], usize>::new();
+        array.toggle(256);
     }
 
     const _: () = {

@@ -33,4 +33,28 @@ pub mod __private {
     pub use bitflags;
     pub use radium;
     pub use ref_cast;
+
+    #[cold]
+    #[inline(never)]
+    #[track_caller]
+    pub fn panic_index_out_of_range(idx: usize, cap: usize) -> ! {
+        panic!("index {idx} out of range for capacity {cap}");
+    }
+
+    /// Panic when `idx` is outside `0..cap`. In-range calls are one not-taken branch.
+    #[inline(always)]
+    pub fn check_bit_index(idx: usize, cap: usize) {
+        if idx >= cap {
+            panic_index_out_of_range(idx, cap);
+        }
+    }
+
+    /// `&true` / `&false` for `Index<Output = bool>`.
+    #[inline(always)]
+    pub fn bit_ref(on: bool) -> &'static bool {
+        static TABLE: [bool; 2] = [false, true];
+        let idx = on as usize;
+        // SAFETY: `bool as usize` is 0 or 1, and `TABLE` has length 2.
+        unsafe { TABLE.get_unchecked(idx) }
+    }
 }

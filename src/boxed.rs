@@ -7,6 +7,8 @@ use num_traits::PrimInt;
 
 use super::slice::BitSlice;
 
+/// Heap bitset. Methods on [`BitSlice`](crate::BitSlice) panic in every build
+/// when the bit index is outside `capacity()`.
 pub struct BoxedBitSet<A, V>(Box<[A]>, PhantomData<V>);
 
 impl<A: Clone, V> Clone for BoxedBitSet<A, V> {
@@ -128,9 +130,14 @@ impl<A: PrimInt, V> core::ops::BitOr for BoxedBitSet<A, V> {
 impl<A: PrimInt, V> core::ops::BitOrAssign for BoxedBitSet<A, V> {
     #[inline]
     fn bitor_assign(&mut self, rhs: Self) {
-        for (a, b) in self.0.iter_mut().zip(rhs.0.iter()) {
-            *a = *a | *b;
-        }
+        self.union_from(&rhs);
+    }
+}
+
+impl<A: PrimInt, V> core::ops::BitOrAssign<&Self> for BoxedBitSet<A, V> {
+    #[inline]
+    fn bitor_assign(&mut self, rhs: &Self) {
+        self.union_from(rhs);
     }
 }
 
@@ -153,13 +160,14 @@ impl<A: PrimInt, V> core::ops::BitAnd for BoxedBitSet<A, V> {
 impl<A: PrimInt, V> core::ops::BitAndAssign for BoxedBitSet<A, V> {
     #[inline]
     fn bitand_assign(&mut self, rhs: Self) {
-        let tail_start = rhs.0.len().min(self.0.len());
-        for (a, b) in self.0.iter_mut().zip(rhs.0.iter()) {
-            *a = *a & *b;
-        }
-        for w in self.0[tail_start..].iter_mut() {
-            *w = A::zero();
-        }
+        self.intersect_from(&rhs);
+    }
+}
+
+impl<A: PrimInt, V> core::ops::BitAndAssign<&Self> for BoxedBitSet<A, V> {
+    #[inline]
+    fn bitand_assign(&mut self, rhs: &Self) {
+        self.intersect_from(rhs);
     }
 }
 
@@ -182,9 +190,14 @@ impl<A: PrimInt, V> core::ops::BitXor for BoxedBitSet<A, V> {
 impl<A: PrimInt, V> core::ops::BitXorAssign for BoxedBitSet<A, V> {
     #[inline]
     fn bitxor_assign(&mut self, rhs: Self) {
-        for (a, b) in self.0.iter_mut().zip(rhs.0.iter()) {
-            *a = *a ^ *b;
-        }
+        self.symmetric_difference_from(&rhs);
+    }
+}
+
+impl<A: PrimInt, V> core::ops::BitXorAssign<&Self> for BoxedBitSet<A, V> {
+    #[inline]
+    fn bitxor_assign(&mut self, rhs: &Self) {
+        self.symmetric_difference_from(rhs);
     }
 }
 
@@ -213,9 +226,14 @@ impl<A: PrimInt, V> core::ops::Sub for BoxedBitSet<A, V> {
 impl<A: PrimInt, V> core::ops::SubAssign for BoxedBitSet<A, V> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        for (a, b) in self.0.iter_mut().zip(rhs.0.iter()) {
-            *a = *a & !*b;
-        }
+        self.difference_from(&rhs);
+    }
+}
+
+impl<A: PrimInt, V> core::ops::SubAssign<&Self> for BoxedBitSet<A, V> {
+    #[inline]
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.difference_from(rhs);
     }
 }
 
@@ -257,6 +275,42 @@ mod tests {
     use alloc::vec::Vec;
     use bitvec::order::Lsb0;
     use proptest::prelude::*;
+
+    #[test]
+    fn index_reads_set_bit() {
+        let mut bs = BoxedBitSet::<u64, usize>::with_capacity(256);
+        bs.insert(200);
+        assert!(bs[200]);
+        assert!(!bs[1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn index_out_of_range() {
+        let bs = BoxedBitSet::<u64, usize>::with_capacity(256);
+        let _ = bs[256];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn contains_out_of_range() {
+        let bs = BoxedBitSet::<u64, usize>::with_capacity(256);
+        let _ = bs.contains(&256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn insert_out_of_range() {
+        let mut bs = BoxedBitSet::<u64, usize>::with_capacity(256);
+        let _ = bs.insert(256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn remove_out_of_range() {
+        let mut bs = BoxedBitSet::<u64, usize>::with_capacity(256);
+        let _ = bs.remove(256);
+    }
 
     #[test]
     fn test_basic() {
@@ -434,6 +488,22 @@ mod tests {
         assert!(!complement.contains(&1));
         assert!(!complement.contains(&100));
         assert!(complement.contains(&0));
+
+        let mut in_place = a.clone();
+        in_place.intersect_from(&b);
+        assert_eq!(in_place, a.clone() & b.clone());
+        let mut in_place = a.clone();
+        in_place.difference_from(&b);
+        assert_eq!(in_place, a.clone() - b.clone());
+        let mut in_place = a.clone();
+        in_place.symmetric_difference_from(&b);
+        assert_eq!(in_place, a.clone() ^ b.clone());
+        let mut in_place = a.clone();
+        in_place &= &b;
+        assert_eq!(in_place, a.clone() & b.clone());
+        let mut in_place = a.clone();
+        in_place -= &b;
+        assert_eq!(in_place, a.clone() - b.clone());
     }
 
     #[test]

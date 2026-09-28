@@ -28,6 +28,11 @@ use super::bitset::PrimBitSetIter;
 /// with `Relaxed` ordering and do not take a consistent snapshot of the entire
 /// bitset. If another thread modifies the set concurrently, these methods may
 /// observe a mix of old and new state across different words.
+///
+/// Out-of-range bit indices are a caller bug. `contains` / `insert` / `remove` /
+/// `set` / `toggle` / `Index` panic in every build with
+/// `index {idx} out of range for capacity {cap}`. `Index` and `contains` load
+/// the word with `Relaxed`.
 #[repr(transparent)]
 pub struct AtomicBitSlice<A, V>(PhantomData<V>, [A]);
 
@@ -159,11 +164,10 @@ where
         V: Copy + num_traits::AsPrimitive<usize>,
     {
         let idx = (*id).as_();
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        if seg >= self.1.len() {
-            return false;
-        }
-        // SAFETY: seg < self.1.len() checked above.
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
         let a = unsafe { self.1.get_unchecked(seg) };
         a.load(Ordering::Relaxed) & mask != A::Item::zero()
     }
@@ -175,11 +179,10 @@ where
         A::Item: radium::marker::BitOps,
     {
         let idx = id.as_();
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        if seg >= self.1.len() {
-            return false;
-        }
-        // SAFETY: seg < self.1.len() checked above.
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
         let a = unsafe { self.1.get_unchecked(seg) };
         let old = a.fetch_or(mask, Ordering::AcqRel);
         old & mask == A::Item::zero()
@@ -192,11 +195,10 @@ where
         A::Item: radium::marker::BitOps,
     {
         let idx = id.as_();
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        if seg >= self.1.len() {
-            return false;
-        }
-        // SAFETY: seg < self.1.len() checked above.
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
         let a = unsafe { self.1.get_unchecked(seg) };
         let old = a.fetch_and(!mask, Ordering::AcqRel);
         old & mask != A::Item::zero()
@@ -222,11 +224,10 @@ where
         A::Item: radium::marker::BitOps,
     {
         let idx = id.as_();
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        if seg >= self.1.len() {
-            return;
-        }
-        // SAFETY: seg < self.1.len() checked above.
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
         let a = unsafe { self.1.get_unchecked(seg) };
         a.fetch_xor(mask, Ordering::AcqRel);
     }
@@ -471,5 +472,27 @@ where
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl<A, V> core::ops::Index<V> for AtomicBitSlice<A, V>
+where
+    A: Radium,
+    A::Item: PrimInt,
+    V: num_traits::AsPrimitive<usize>,
+{
+    type Output = bool;
+
+    #[inline(always)]
+    fn index(&self, id: V) -> &bool {
+        let idx = id.as_();
+        let cap = self.capacity();
+        if idx >= cap {
+            crate::__private::panic_index_out_of_range(idx, cap);
+        }
+        let (seg, mask) = Self::index_of(idx);
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
+        let word = unsafe { self.1.get_unchecked(seg) };
+        crate::__private::bit_ref(word.load(Ordering::Relaxed) & mask != A::Item::zero())
     }
 }

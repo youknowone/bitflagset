@@ -44,6 +44,8 @@ radium = "1.1"
 ref-cast = "1.0.25"
 
 [dev-dependencies]
+bit-set = "0.10"
+bit-vec = "0.9"
 bitflags = "2.6"
 bitvec = "1.0.1"
 criterion = "0.5"
@@ -51,7 +53,7 @@ proptest = "1.4.0"
 rand = "0.8.5"
 
 [[bench]]
-name = "vs_bitvec"
+name = "compare"
 harness = false
 
 [[bench]]
