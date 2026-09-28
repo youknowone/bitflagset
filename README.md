@@ -17,162 +17,139 @@ Type-safe bitsets with `Set`-like ergonomics. Operations are direct primitive bi
 ## Performance
 
 <!-- BENCH_TABLES:BEGIN -->
-All numbers below are Criterion medians from `cargo bench --bench vs_bitvec` on Apple M-series (AArch64), collected on **2026-09-28**. Compared against bitvec `BitArray` (non-atomic) and `BitArray<AtomicU64>` / `BitVec<AtomicU64>` (atomic).  
-`iter` rows measure `.iter().count()`.
+All numbers below are Criterion medians from `cargo bench --bench compare`, run on Apple M-series (AArch64), collected on **2026-09-28**. This is a shared-machine measurement.  
+Load at bench time: before `13:02  up 4 days, 13:22, 52 users, load averages: 88.03 91.00 78.54`; after `13:12  up 4 days, 13:32, 52 users, load averages: 52.69 68.25 72.17`.
+Each competitor cell is that library's median and how many times bitflagset is faster (`other / bitflagset`). The bitflagset column and every competitor in that row come from the **same** Criterion group, so the printed ratio is `competitor / bitflagset` on the printed times (rounded to 0.1). `—` means that library has no equivalent in the bench.  
+`iter`, `union`, `intersection`, and `difference` count iterator items. `insert`, `remove`, `set`, `set_false`, `clear`, `union_with` / `or`, `intersect_with` / `and`, and `difference_with` clone the destination in `iter_batched_ref` setup and time only the operation. Those in-place ops borrow the other set (`union_from`, `intersect_from`, `difference_from`), matching bit-set `*_with` and bit-vec `or` / `and` / `difference`. Fixed-size rows use `BatchSize::SmallInput`; the 65536-bit rows use `BatchSize::LargeInput`. `len` / `count` is `len` / `count` / `count_ones`. `clear` is `clear` / `make_empty` / `fill(false)`. `contains` / `get` is `contains` / `get`. bitvec `bitor` / `bitand` / `bitxor` / `not` are by-value operators that build a new set. Atomic `insert` builds a fresh set and sets one bit (`set_aliased` on bitvec).
 
-### Non-atomic: `BitSet` vs bitvec `BitArray`
+### Non-atomic
+
+`BitSet<[u64; N]>` / `BoxedBitSet<u64>` against bitvec `BitArray` / `BitVec<u64>`, `bit_set::BitSet` (default `u32` blocks, `with_capacity`), and `bit_vec::BitVec` (default `u32` blocks, `from_elem`). One group per size measures bitflagset and all three libraries.
 
 **256-bit** (`[u64; 4]`):
 
-| Operation | bitflagset | bitvec | Speedup |
-|-----------|-----------|--------|---------|
-| `bitor` | 2.06 ns | 26.73 ns | **13.0x** |
-| `bitand` | 2.01 ns | 28.65 ns | **14.3x** |
-| `bitxor` | 2.10 ns | 26.76 ns | **12.7x** |
-| `not` | 1.33 ns | 2.06 ns | **1.6x** |
-| `iter` | 0.70 ns | 2.40 ns | **3.4x** |
+| Operation | bitflagset | bitvec | bit-set | bit-vec |
+|-----------|------------|--------|---------|---------|
+| `insert` | 0.86 ns | — | 2.00 ns (2.3x) | — |
+| `remove` | 0.69 ns | — | 1.59 ns (2.3x) | — |
+| `contains / get` | 1.28 ns | 1.33 ns (1.0x) | 1.27 ns (1.0x) | 1.39 ns (1.1x) |
+| `len / count` | 0.96 ns | 5.41 ns (5.6x) | 4.37 ns (4.6x) | 4.06 ns (4.2x) |
+| `is_subset` | 1.05 ns | — | 1.59 ns (1.5x) | — |
+| `iter` | 0.95 ns | 5.36 ns (5.6x) | 4.31 ns (4.5x) | — |
+| `clear` | 2.46 ns | — | 3.49 ns (1.4x) | 3.35 ns (1.4x) |
+| `set` | 0.89 ns | — | — | 2.32 ns (2.6x) |
+| `set_false` | 0.62 ns | — | — | 2.23 ns (3.6x) |
+| `union` | 2.59 ns | — | 10.71 ns (4.1x) | — |
+| `intersection` | 2.78 ns | — | 11.01 ns (4.0x) | — |
+| `difference` | 2.92 ns | — | 9.27 ns (3.2x) | — |
+| `union_with / or` | 2.46 ns | — | 9.67 ns (3.9x) | 7.97 ns (3.2x) |
+| `intersect_with / and` | 2.24 ns | — | 9.67 ns (4.3x) | 7.64 ns (3.4x) |
+| `difference_with` | 2.23 ns | — | 8.79 ns (3.9x) | 7.84 ns (3.5x) |
+| `bitor` | 2.71 ns | 54.99 ns (20.3x) | — | — |
+| `bitand` | 2.61 ns | 60.11 ns (23.0x) | — | — |
+| `bitxor` | 2.84 ns | 56.39 ns (19.9x) | — | — |
+| `not` | 1.90 ns | 2.93 ns (1.5x) | — | — |
 
 **1024-bit** (`[u64; 16]`):
 
-| Operation | bitflagset | bitvec | Speedup |
-|-----------|-----------|--------|---------|
-| `bitor` | 6.60 ns | 113.17 ns | **17.2x** |
-| `bitand` | 6.74 ns | 110.64 ns | **16.4x** |
-| `bitxor` | 6.44 ns | 114.71 ns | **17.8x** |
-| `not` | 5.18 ns | 7.48 ns | **1.4x** |
-| `iter` | 2.50 ns | 3.26 ns | **1.3x** |
+| Operation | bitflagset | bitvec | bit-set | bit-vec |
+|-----------|------------|--------|---------|---------|
+| `insert` | 3.09 ns | — | 3.02 ns (1.0x) | — |
+| `remove` | 3.28 ns | — | 3.17 ns (1.0x) | — |
+| `contains / get` | 1.19 ns | 1.21 ns (1.0x) | 1.35 ns (1.1x) | 1.27 ns (1.1x) |
+| `len / count` | 3.23 ns | 18.35 ns (5.7x) | 4.80 ns (1.5x) | 5.18 ns (1.6x) |
+| `is_subset` | 0.96 ns | — | 1.53 ns (1.6x) | — |
+| `iter` | 3.17 ns | 17.51 ns (5.5x) | 9.98 ns (3.1x) | — |
+| `clear` | 2.91 ns | — | 3.53 ns (1.2x) | 3.28 ns (1.1x) |
+| `set` | 3.57 ns | — | — | 3.51 ns (1.0x) |
+| `set_false` | 2.30 ns | — | — | 3.84 ns (1.7x) |
+| `union` | 12.21 ns | — | 32.74 ns (2.7x) | — |
+| `intersection` | 12.33 ns | — | 33.73 ns (2.7x) | — |
+| `difference` | 8.87 ns | — | 34.34 ns (3.9x) | — |
+| `union_with / or` | 4.70 ns | — | 25.00 ns (5.3x) | 7.45 ns (1.6x) |
+| `intersect_with / and` | 4.65 ns | — | 26.73 ns (5.7x) | 6.99 ns (1.5x) |
+| `difference_with` | 4.51 ns | — | 24.64 ns (5.5x) | 7.55 ns (1.7x) |
+| `bitor` | 10.35 ns | 230.18 ns (22.2x) | — | — |
+| `bitand` | 9.69 ns | 219.14 ns (22.6x) | — | — |
+| `bitxor` | 9.95 ns | 224.74 ns (22.6x) | — | — |
+| `not` | 6.34 ns | 10.79 ns (1.7x) | — | — |
 
-Binary operators benefit from LLVM auto-vectorization of word-level loops into SIMD instructions.
+**65536-bit** (`BoxedBitSet`):
 
-### Atomic: `AtomicBitSet` vs bitvec `BitArray<AtomicU64>`
+| Operation | bitflagset | bitvec | bit-set | bit-vec |
+|-----------|------------|--------|---------|---------|
+| `insert` | 3.85 ns | — | 5.60 ns (1.5x) | — |
+| `remove` | 2.22 ns | — | 3.03 ns (1.4x) | — |
+| `contains / get` | 1.36 ns | 1.48 ns (1.1x) | 1.31 ns (1.0x) | 1.29 ns (0.9x) |
+| `len / count` | 170.97 ns | 1.04 us (6.1x) | 224.59 ns (1.3x) | 228.79 ns (1.3x) |
+| `is_subset` | 1.33 ns | — | 1.55 ns (1.2x) | — |
+| `iter` | 170.51 ns | 967.78 ns (5.7x) | 228.65 ns (1.3x) | — |
+| `clear` | 174.37 ns | — | 176.29 ns (1.0x) | 156.96 ns (0.9x) |
+| `set` | 3.03 ns | — | — | 5.18 ns (1.7x) |
+| `set_false` | 2.24 ns | — | — | 4.98 ns (2.2x) |
+| `union` | 736.97 ns | — | 2.02 us (2.7x) | — |
+| `intersection` | 758.68 ns | — | 1.91 us (2.5x) | — |
+| `difference` | 769.80 ns | — | 1.90 us (2.5x) | — |
+| `union_with / or` | 229.65 ns | — | 1.37 us (6.0x) | 245.82 ns (1.1x) |
+| `intersect_with / and` | 234.02 ns | — | 1.33 us (5.7x) | 226.50 ns (1.0x) |
+| `difference_with` | 265.78 ns | — | 1.36 us (5.1x) | 260.80 ns (1.0x) |
+| `bitor` | 540.07 ns | 17.47 us (32.3x) | — | — |
+| `bitand` | 517.18 ns | 15.86 us (30.7x) | — | — |
+| `bitxor` | 541.86 ns | 18.30 us (33.8x) | — | — |
+| `not` | 288.68 ns | 1.05 us (3.6x) | — | — |
+
+`first` / `last` are omitted: `bit-set` and `bit-vec` have neither. bit-set has no owned `|` / `&` / `-`; those producing operators are the bitvec `bitor` / `bitand` / `bitxor` / `not` rows. Iterator `union` / `intersection` / `difference` allocate nothing and count yielded indices. `union_with` / `or`, `intersect_with` / `and`, and `difference_with` are in place (`union_from`, `intersect_from`, `difference_from` versus bit-set `*_with` and bit-vec `or` / `and` / `difference`). `bit-vec` `insert` / `remove` shift the vector, so membership writes are `set` / `set_false`. `bit-vec` has no `is_subset` and no set-index iterator.
+
+Rows that are still slower, and why:
+- `256-bit contains / get vs bit-set`: bitflagset 1.28 ns, competitor 1.27 ns. Both read one word. The final paired sample is 1.28 ns vs 1.27 ns.
+- `65536-bit contains / get vs bit-set`: bitflagset 1.36 ns, competitor 1.31 ns. Both read one word. Five interleaved runs against bit-vec, the same one-word load, overlapped; this bit-set sample is 1.36 ns vs 1.31 ns.
+- `65536-bit contains / get vs bit-vec`: bitflagset 1.36 ns, competitor 1.29 ns. Both read one word. Five interleaved medians overlap (ours 1.11–1.73 ns, bit-vec 1.19–1.97 ns).
+- `1024-bit insert`: bitflagset 3.09 ns, competitor 3.02 ns. Both set one bit in a pre-sized buffer. The final paired sample is 3.09 ns vs 3.02 ns.
+- `1024-bit remove`: bitflagset 3.28 ns, competitor 3.17 ns. Both clear one bit in a pre-sized buffer. The final paired sample is 3.28 ns vs 3.17 ns.
+- `1024-bit set`: bitflagset 3.57 ns, competitor 3.51 ns. Both set one bit in a pre-sized buffer. The final paired sample is 3.57 ns vs 3.51 ns.
+- `65536-bit intersect_with / and`: bitflagset 234.02 ns, competitor 226.50 ns. Both use NEON `and.16b`, 64 bytes per iteration. bit-vec also folds a changed-bit flag. Five interleaved medians overlap.
+- `65536-bit difference_with`: bitflagset 265.78 ns, competitor 260.80 ns. Both use NEON `bic.16b`, 64 bytes per iteration. bit-vec also builds a changed-bit mask. Five interleaved medians overlap (ours 257–441 ns, bit-vec 256–301 ns).
+- `65536-bit clear vs bit-vec`: bitflagset 174.37 ns, competitor 156.96 ns. Both zero 8 KiB with `memset`. Five interleaved medians overlap (ours 144–160 ns, bit-vec 142–183 ns).
+
+### Atomic
+
+`AtomicBitSet<[AtomicU64; N]>` / `AtomicBoxedBitSet` against bitvec `BitArray<AtomicU64>` / `BitVec<AtomicU64>`. bit-set and bit-vec have no atomic storage.
 
 **256-bit** (`[AtomicU64; 4]`):
 
-| Operation | bitflagset | bitvec | Speedup |
-|-----------|-----------|--------|---------|
-| `len` | 1.30 ns | 2.57 ns | **2.0x** |
-| `is_empty` | 0.57 ns | 2.72 ns | **4.8x** |
-| `contains` | 0.88 ns | 0.84 ns | **1.0x** |
-| `insert` | 1.35 ns | 1.70 ns | **1.3x** |
-| `iter` | 1.19 ns | 2.47 ns | **2.1x** |
+| Operation | bitflagset | bitvec | bit-set | bit-vec |
+|-----------|------------|--------|---------|---------|
+| `len` | 1.55 ns | 5.61 ns (3.6x) | — | — |
+| `is_empty` | 0.60 ns | 5.73 ns (9.6x) | — | — |
+| `contains` | 1.21 ns | 1.11 ns (0.9x) | — | — |
+| `insert` | 1.81 ns | 2.45 ns (1.4x) | — | — |
+| `iter` | 2.02 ns | 7.89 ns (3.9x) | — | — |
 
 **1024-bit** (`[AtomicU64; 16]`):
 
-| Operation | bitflagset | bitvec | Speedup |
-|-----------|-----------|--------|---------|
-| `len` | 4.13 ns | 5.67 ns | **1.4x** |
-| `is_empty` | 0.55 ns | 5.95 ns | **10.8x** |
-| `contains` | 0.86 ns | 0.82 ns | **1.0x** |
-| `insert` | 2.50 ns | 2.65 ns | **1.1x** |
-| `iter` | 4.11 ns | 5.62 ns | **1.4x** |
+| Operation | bitflagset | bitvec | bit-set | bit-vec |
+|-----------|------------|--------|---------|---------|
+| `len` | 5.32 ns | 22.58 ns (4.2x) | — | — |
+| `is_empty` | 0.68 ns | 19.80 ns (29.1x) | — | — |
+| `contains` | 1.18 ns | 1.03 ns (0.9x) | — | — |
+| `insert` | 3.13 ns | 3.81 ns (1.2x) | — | — |
+| `iter` | 5.77 ns | 18.48 ns (3.2x) | — | — |
 
-`is_empty` uses short-circuit evaluation (early return on first non-zero word).
+**65536-bit** (`AtomicBoxedBitSet`):
 
-### vs bit-set / bit-vec
+| Operation | bitflagset | bitvec | bit-set | bit-vec |
+|-----------|------------|--------|---------|---------|
+| `len` | 538.30 ns | 969.05 ns (1.8x) | — | — |
+| `is_empty` | 0.80 ns | 961.62 ns (1202.0x) | — | — |
+| `contains` | 1.14 ns | 1.14 ns (1.0x) | — | — |
+| `insert` | 179.26 ns | — | — | — |
+| `iter` | 483.44 ns | 962.34 ns (2.0x) | — | — |
 
-All numbers below are Criterion medians from `cargo bench --bench vs_bit_set` on Apple M-series (AArch64), collected on **2026-09-28**. `bit_set::BitSet` (default `u32` blocks) is pre-sized with `with_capacity`. `bit_vec::BitVec` (default `u32` blocks) is pre-sized with `from_elem`.  
-`iter`, `union`, `intersection`, and `difference` rows measure iterator `.count()` with `iter`. `insert`, `remove`, `set`, `set_false`, `clear`, and the in-place rows (`union_with` / `intersect_with` / `difference_with`, `or` / `and` / `difference`) clone the destination in `iter_batched_ref` setup and time only the operation. `&=` / `-=` also clone the right-hand side in that setup (`iter_batched`), because those operators take it by value. Fixed-size rows use `BatchSize::SmallInput`; the 65536-bit rows use `BatchSize::LargeInput`. `len` is `len` / `count`. `clear` is `clear` / `make_empty`.
+`is_empty` returns on the first non-zero word. Atomic `contains` loads the word with `Relaxed` ordering. The 65536-bit atomic `insert` column is `—` for bitvec: that bench does not include an aliased set on `BitVec<AtomicU64>`.
 
-#### `BitSet<[u64; N]>` / `BoxedBitSet` vs `bit_set::BitSet`
-
-**256-bit** (`[u64; 4]`):
-
-| Operation | bitflagset | bit-set | Speedup |
-|-----------|-----------|---------|---------|
-| `insert` | 0.72 ns | 1.76 ns | **2.5x** |
-| `remove` | 0.69 ns | 1.37 ns | **2.0x** |
-| `contains` | 0.86 ns | 1.05 ns | **1.2x** |
-| `len` | 0.78 ns | 2.13 ns | **2.7x** |
-| `iter` | 0.75 ns | 2.78 ns | **3.7x** |
-| `union` | 2.06 ns | 8.37 ns | **4.1x** |
-| `intersection` | 2.17 ns | 8.00 ns | **3.7x** |
-| `difference` | 2.06 ns | 8.14 ns | **4.0x** |
-| `union_with` | 1.65 ns | 7.26 ns | **4.4x** |
-| `intersect_with` | 1.38 ns | 6.98 ns | **5.1x** |
-| `difference_with` | 1.37 ns | 7.28 ns | **5.3x** |
-| `is_subset` | 0.63 ns | 1.20 ns | **1.9x** |
-| `clear` | 1.79 ns | 3.07 ns | **1.7x** |
-
-**1024-bit** (`[u64; 16]`):
-
-| Operation | bitflagset | bit-set | Speedup |
-|-----------|-----------|---------|---------|
-| `insert` | 2.57 ns | 3.28 ns | **1.3x** |
-| `remove` | 3.15 ns | 2.85 ns | **0.9x** |
-| `contains` | 0.85 ns | 1.21 ns | **1.4x** |
-| `len` | 2.73 ns | 3.67 ns | **1.3x** |
-| `iter` | 3.14 ns | 6.88 ns | **2.2x** |
-| `union` | 12.13 ns | 31.36 ns | **2.6x** |
-| `intersection` | 9.31 ns | 36.48 ns | **3.9x** |
-| `difference` | 9.26 ns | 33.82 ns | **3.7x** |
-| `union_with` | 4.22 ns | 23.57 ns | **5.6x** |
-| `intersect_with` | 10.63 ns | 23.78 ns | **2.2x** |
-| `difference_with` | 10.85 ns | 23.34 ns | **2.2x** |
-| `is_subset` | 0.74 ns | 1.29 ns | **1.7x** |
-| `clear` | 2.36 ns | 3.00 ns | **1.3x** |
-
-**65536-bit** (`BoxedBitSet`):
-
-| Operation | bitflagset | bit-set | Speedup |
-|-----------|-----------|---------|---------|
-| `insert` | 4.04 ns | 4.95 ns | **1.2x** |
-| `remove` | 4.82 ns | 2.05 ns | **0.4x** |
-| `contains` | 0.97 ns | 1.22 ns | **1.3x** |
-| `len` | 149.68 ns | 191.56 ns | **1.3x** |
-| `iter` | 146.79 ns | 188.56 ns | **1.3x** |
-| `union` | 696.64 ns | 1.78 us | **2.6x** |
-| `intersection` | 640.16 ns | 1.82 us | **2.8x** |
-| `difference` | 573.87 ns | 1.96 us | **3.4x** |
-| `union_with` | 209.54 ns | 1.17 us | **5.6x** |
-| `intersect_with` | 311.83 ns | 1.18 us | **3.8x** |
-| `difference_with` | 306.94 ns | 1.17 us | **3.8x** |
-| `is_subset` | 1.22 ns | 1.45 ns | **1.2x** |
-| `clear` | 162.24 ns | 158.46 ns | **1.0x** |
-
-`first` / `last` are omitted: `bit-set` has neither. Owned `|` / `&` / `-` are omitted: `bit-set` has no new-set operator. Iterator `union` / `intersection` / `difference` are the producing form; `union_with` / `intersect_with` / `difference_with` are in place (`union_from`, `&=`, `-=`).
-
-#### `BitSet<[u64; N]>` / `BoxedBitSet` vs `bit_vec::BitVec`
-
-**256-bit** (`[u64; 4]`):
-
-| Operation | bitflagset | bit-vec | Speedup |
-|-----------|-----------|---------|---------|
-| `set` | 0.72 ns | 1.96 ns | **2.7x** |
-| `set_false` | 0.72 ns | 1.92 ns | **2.7x** |
-| `get` | 0.86 ns | 3.20 ns | **3.7x** |
-| `count` | 0.78 ns | 2.11 ns | **2.7x** |
-| `or` | 1.65 ns | 4.06 ns | **2.5x** |
-| `and` | 1.38 ns | 3.95 ns | **2.9x** |
-| `difference` | 1.37 ns | 3.86 ns | **2.8x** |
-| `clear` | 1.79 ns | 3.24 ns | **1.8x** |
-
-**1024-bit** (`[u64; 16]`):
-
-| Operation | bitflagset | bit-vec | Speedup |
-|-----------|-----------|---------|---------|
-| `set` | 3.39 ns | 2.86 ns | **0.8x** |
-| `set_false` | 1.96 ns | 3.49 ns | **1.8x** |
-| `get` | 0.85 ns | 3.19 ns | **3.8x** |
-| `count` | 2.73 ns | 3.69 ns | **1.4x** |
-| `or` | 4.22 ns | 6.63 ns | **1.6x** |
-| `and` | 10.63 ns | 6.71 ns | **0.6x** |
-| `difference` | 10.85 ns | 7.06 ns | **0.7x** |
-| `clear` | 2.36 ns | 2.91 ns | **1.2x** |
-
-**65536-bit** (`BoxedBitSet`):
-
-| Operation | bitflagset | bit-vec | Speedup |
-|-----------|-----------|---------|---------|
-| `set` | 4.36 ns | 4.59 ns | **1.1x** |
-| `set_false` | 4.25 ns | 5.52 ns | **1.3x** |
-| `get` | 0.97 ns | 3.21 ns | **3.3x** |
-| `count` | 149.68 ns | 188.36 ns | **1.3x** |
-| `or` | 209.54 ns | 212.06 ns | **1.0x** |
-| `and` | 311.83 ns | 229.63 ns | **0.7x** |
-| `difference` | 306.94 ns | 223.46 ns | **0.7x** |
-| `clear` | 162.24 ns | 155.74 ns | **1.0x** |
-
-`bit-vec` `insert` / `remove` shift the vector, so they are not compared. `clear` on the bit-vec side is `fill(false)`, which keeps the length. `bit-vec` has no `is_subset`, no set-index iterator, and no `first` / `last`.
+Rows that are still slower, and why:
+- `256-bit atomic contains`: bitflagset 1.21 ns, competitor 1.11 ns. Both are one `Relaxed` load plus an in-range check. Interleaved samples sit on top of each other around 1–3 ns.
+- `1024-bit atomic contains`: bitflagset 1.18 ns, competitor 1.03 ns. Same `Relaxed` load and in-range check as the 256-bit row. Five interleaved medians overlap (ours 1.00–2.58 ns, bitvec 0.98–2.59 ns). The ordering is not `SeqCst`.
 <!-- BENCH_TABLES:END -->
 
 ## Types
@@ -255,7 +232,7 @@ let difference   = a - b;   // Sub
 let complement   = !a;      // Not
 ```
 
-All operators also have `Assign` variants (`|=`, `&=`, `^=`, `-=`).
+All operators also have `Assign` variants (`|=`, `&=`, `^=`, `-=`), including borrowed right-hand sides (`|= &other`). `union_from`, `intersect_from`, `difference_from`, and `symmetric_difference_from` are the named borrowed in-place forms.
 
 ### Atomic bitsets
 

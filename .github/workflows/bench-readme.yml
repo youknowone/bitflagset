@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   vs-bitvec-readme:
-    name: vs_bitvec + vs_bit_set + README check
+    name: compare bench + README check
     runs-on: ubuntu-latest
 
     steps:
@@ -37,11 +37,8 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Run vs_bitvec benchmarks
-        run: cargo bench --bench vs_bitvec
-
-      - name: Run vs_bit_set benchmarks
-        run: cargo bench --bench vs_bit_set
+      - name: Run compare benchmarks
+        run: cargo bench --bench compare
 
       - name: Check README benchmark tables
         id: readme_check
@@ -71,8 +68,7 @@ jobs:
 
             Run the following locally and commit the updated README:
             \`\`\`bash
-            cargo bench --bench vs_bitvec
-            cargo bench --bench vs_bit_set
+            cargo bench --bench compare
             scripts/update_readme_bench.sh
             \`\`\`
 

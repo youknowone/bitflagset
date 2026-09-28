@@ -246,7 +246,7 @@ impl<A: PrimStore, V> BitSet<A, V> {
         let bit = A::one().unsigned_shl(idx as u32);
         if value {
             self.0 = self.0 | bit;
-        } else {
+        } else if self.0 & bit != A::zero() {
             self.0 = self.0 & !bit;
         }
     }
@@ -286,9 +286,11 @@ impl<A: PrimStore, V> BitSet<A, V> {
             return false;
         }
         let bit = A::one().unsigned_shl(idx as u32);
-        let was_present = self.0 & bit != A::zero();
+        if self.0 & bit == A::zero() {
+            return false;
+        }
         self.0 = self.0 & !bit;
-        was_present
+        true
     }
 
     #[inline]
@@ -871,9 +873,17 @@ where
 {
     #[inline]
     fn bitor_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] |= rhs.0[i];
-        }
+        self.union_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::BitOrAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + core::ops::BitOrAssign + Copy,
+{
+    #[inline]
+    fn bitor_assign(&mut self, rhs: &Self) {
+        self.union_from(rhs);
     }
 }
 
@@ -894,9 +904,17 @@ where
 {
     #[inline]
     fn bitand_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] &= rhs.0[i];
-        }
+        self.intersect_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::BitAndAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + core::ops::BitAndAssign + Copy,
+{
+    #[inline]
+    fn bitand_assign(&mut self, rhs: &Self) {
+        self.intersect_from(rhs);
     }
 }
 
@@ -917,9 +935,17 @@ where
 {
     #[inline]
     fn bitxor_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] ^= rhs.0[i];
-        }
+        self.symmetric_difference_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::BitXorAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + core::ops::BitXorAssign + Copy,
+{
+    #[inline]
+    fn bitxor_assign(&mut self, rhs: &Self) {
+        self.symmetric_difference_from(rhs);
     }
 }
 
@@ -951,9 +977,17 @@ where
 {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        for i in 0..N {
-            self.0[i] &= !rhs.0[i];
-        }
+        self.difference_from(&rhs);
+    }
+}
+
+impl<T, V, const N: usize> core::ops::SubAssign<&Self> for BitSet<[T; N], V>
+where
+    T: PrimStore + Copy + core::ops::Not<Output = T> + core::ops::BitAndAssign,
+{
+    #[inline]
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.difference_from(rhs);
     }
 }
 
@@ -1030,7 +1064,7 @@ impl<T: PrimStore + core::ops::BitOrAssign + Copy, V, const N: usize>
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod tests {
     use super::*;
     use alloc::vec;

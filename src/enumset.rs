@@ -2207,7 +2207,7 @@ macro_rules! atomic_bitflagset {
     };
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod bitflag_tests {
     use super::BitFlag;
 
@@ -2665,7 +2665,7 @@ mod attr_macro_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod bitflags_mode_tests {
     extern crate alloc;
     use alloc::{format, vec, vec::Vec};
@@ -3005,7 +3005,7 @@ mod bitflags_mode_interop_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod atomic_bitflagset_tests {
     extern crate alloc;
     use alloc::format;

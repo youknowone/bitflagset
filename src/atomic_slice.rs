@@ -159,11 +159,13 @@ where
         V: Copy + num_traits::AsPrimitive<usize>,
     {
         let idx = (*id).as_();
-        let (seg, mask) = Self::index_of(idx);
+        let bits = Self::BITS_PER;
+        let seg = idx / bits;
         if seg >= self.1.len() {
             return false;
         }
-        // SAFETY: seg < self.1.len() checked above.
+        let mask = A::Item::one().unsigned_shl((idx % bits) as u32);
+        // SAFETY: `seg >= self.1.len()` was false, so `seg < self.1.len()`.
         let a = unsafe { self.1.get_unchecked(seg) };
         a.load(Ordering::Relaxed) & mask != A::Item::zero()
     }

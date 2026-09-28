@@ -539,6 +539,23 @@ impl<A: Radium, V, const N: usize> AtomicBitSet<[A; N], V> {
         Self(raw, PhantomData)
     }
 
+    /// Bit test against the inline array, without going through a fat slice pointer.
+    #[inline]
+    pub fn contains(&self, id: &V) -> bool
+    where
+        A::Item: PrimInt,
+        V: Copy + AsPrimitive<usize>,
+    {
+        let idx = (*id).as_();
+        let bits = core::mem::size_of::<A>() * 8;
+        let seg = idx / bits;
+        let Some(atomic) = self.0.get(seg) else {
+            return false;
+        };
+        let mask = A::Item::one().unsigned_shl((idx % bits) as u32);
+        atomic.load(Ordering::Relaxed) & mask != A::Item::zero()
+    }
+
     #[inline]
     pub fn from_element(id: V) -> Self
     where
@@ -615,7 +632,7 @@ impl<A: Radium, V, const N: usize> AtomicBitSet<[A; N], V> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod tests {
     use super::*;
     use alloc::vec;

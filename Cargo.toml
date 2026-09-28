@@ -53,11 +53,7 @@ proptest = "1.4.0"
 rand = "0.8.5"
 
 [[bench]]
-name = "vs_bitvec"
-harness = false
-
-[[bench]]
-name = "vs_bit_set"
+name = "compare"
 harness = false
 
 [[bench]]

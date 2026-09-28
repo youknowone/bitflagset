@@ -29,11 +29,12 @@ impl<S: AsRef<[T]>, T: PrimInt + BitAndAssign, V> WordSetIter<S, T, V> {
 
     #[inline]
     fn remaining_len(&self) -> usize {
-        self.current.len()
-            + self.store.as_ref()[self.word_idx..]
-                .iter()
-                .map(|w| w.count_ones() as usize)
-                .sum::<usize>()
+        let words = self.store.as_ref();
+        let mut n = self.current.into_bits().count_ones() as usize;
+        for word in &words[self.word_idx..] {
+            n += word.count_ones() as usize;
+        }
+        n
     }
 }
 
@@ -109,11 +110,11 @@ pub struct Drain<'a, T: PrimInt, V> {
 impl<T: PrimInt + BitAndAssign, V> Drain<'_, T, V> {
     #[inline]
     fn remaining_len(&self) -> usize {
-        self.current.len()
-            + self.words[self.word_idx..]
-                .iter()
-                .map(|w| w.count_ones() as usize)
-                .sum::<usize>()
+        let mut n = self.current.into_bits().count_ones() as usize;
+        for word in &self.words[self.word_idx..] {
+            n += word.count_ones() as usize;
+        }
+        n
     }
 }
 
@@ -319,7 +320,10 @@ impl<T: PrimInt, V> BitSlice<T, V> {
             self.capacity()
         );
         let (seg, mask) = Self::index_of(idx);
-        self.1.get(seg).is_some_and(|w| *w & mask != T::zero())
+        let Some(word) = self.1.get(seg) else {
+            return false;
+        };
+        *word & mask != T::zero()
     }
 
     #[inline]
@@ -334,12 +338,13 @@ impl<T: PrimInt, V> BitSlice<T, V> {
             self.capacity()
         );
         let (seg, mask) = Self::index_of(idx);
-        if let Some(word) = self.1.get_mut(seg) {
-            if value {
-                *word = *word | mask;
-            } else {
-                *word = *word & !mask;
-            }
+        let Some(word) = self.1.get_mut(seg) else {
+            return;
+        };
+        if value {
+            *word = *word | mask;
+        } else if *word & mask != T::zero() {
+            *word = *word & !mask;
         }
     }
 
@@ -378,9 +383,11 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         let Some(word) = self.1.get_mut(seg) else {
             return false;
         };
-        let was_present = *word & mask != T::zero();
+        if *word & mask == T::zero() {
+            return false;
+        }
         *word = *word & !mask;
-        was_present
+        true
     }
 
     #[inline]
@@ -444,9 +451,38 @@ impl<T: PrimInt, V> BitSlice<T, V> {
     }
 
     pub fn union_from(&mut self, other: &Self) {
-        let min = self.1.len().min(other.1.len());
-        for i in 0..min {
-            self.1[i] = self.1[i] | other.1[i];
+        let n = self.1.len().min(other.1.len());
+        let (dst, _) = self.1.split_at_mut(n);
+        for (a, b) in dst.iter_mut().zip(other.1[..n].iter()) {
+            *a = *a | *b;
+        }
+    }
+
+    /// In-place intersection with `other`. Words past `other` become zero.
+    pub fn intersect_from(&mut self, other: &Self) {
+        let n = self.1.len().min(other.1.len());
+        let (dst, tail) = self.1.split_at_mut(n);
+        for (a, b) in dst.iter_mut().zip(other.1[..n].iter()) {
+            *a = *a & *b;
+        }
+        tail.fill(T::zero());
+    }
+
+    /// In-place difference (`self - other`).
+    pub fn difference_from(&mut self, other: &Self) {
+        let n = self.1.len().min(other.1.len());
+        let (dst, _) = self.1.split_at_mut(n);
+        for (a, b) in dst.iter_mut().zip(other.1[..n].iter()) {
+            *a = *a & !*b;
+        }
+    }
+
+    /// In-place symmetric difference with `other`.
+    pub fn symmetric_difference_from(&mut self, other: &Self) {
+        let n = self.1.len().min(other.1.len());
+        let (dst, _) = self.1.split_at_mut(n);
+        for (a, b) in dst.iter_mut().zip(other.1[..n].iter()) {
+            *a = *a ^ *b;
         }
     }
 
