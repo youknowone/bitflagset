@@ -466,6 +466,10 @@ macro_rules! __bitflagset_cfg_guard {
 /// constant, including `#[cfg]` and doc comments, apply to every use of that
 /// constant. A `#[cfg]`-disabled flag is not part of `all()`, `Debug`, names,
 /// or `bitflags::Flags::FLAGS`.
+///
+/// An out-of-range bit index panics in every build from `contains`, `insert`,
+/// `remove`, `set`, `toggle`, and `Index`. Const methods use the literal
+/// `index out of range for capacity`.
 #[macro_export]
 macro_rules! bitflagset {
     (@ops $name:ident, $repr:ty) => {
@@ -680,7 +684,9 @@ macro_rules! bitflagset {
             #[inline]
             pub const fn contains(&self, value: &$typ) -> bool {
                 let shift = *value as u8;
-                debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
+                if shift >= <Self as $crate::BitFlagSet<$typ, $repr>>::BITS {
+                    panic!("index out of range for capacity");
+                }
                 self.bits() & ((1 as $repr) << shift) != 0
             }
             #[inline]
@@ -714,25 +720,21 @@ macro_rules! bitflagset {
             #[inline]
             pub fn toggle(&mut self, value: $typ) {
                 let shift = value as u8;
-                debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
                 <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).toggle(shift);
             }
             #[inline]
             pub fn set(&mut self, value: $typ, enabled: bool) {
                 let shift = value as u8;
-                debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
                 <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).set(shift, enabled);
             }
             #[inline]
             pub fn insert(&mut self, value: $typ) -> bool {
                 let shift = value as u8;
-                debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
                 <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).insert(shift)
             }
             #[inline]
             pub fn remove(&mut self, value: $typ) -> bool {
                 let shift = value as u8;
-                debug_assert!(shift < <Self as $crate::BitFlagSet<$typ, $repr>>::BITS);
                 <$crate::BitSet::<$repr, u8> as $crate::__private::ref_cast::RefCast>::ref_cast_mut(&mut self.0).remove(shift)
             }
             #[inline]
@@ -941,6 +943,20 @@ macro_rules! bitflagset {
             }
         }
 
+        impl core::ops::Index<$typ> for $name {
+            type Output = bool;
+
+            #[inline]
+            fn index(&self, value: $typ) -> &bool {
+                let shift = value as u8;
+                let cap = <Self as $crate::BitFlagSet<$typ, $repr>>::BITS;
+                if shift >= cap {
+                    $crate::__private::panic_index_out_of_range(shift as usize, cap as usize);
+                }
+                $crate::__private::bit_ref(self.bits() & ((1 as $repr) << shift) != 0)
+            }
+        }
+
         impl $crate::BitFlagSet<$typ, $repr> for $name {
             const BITS: u8 = <$repr>::BITS as u8;
             #[inline]
@@ -1094,12 +1110,10 @@ macro_rules! bitflagset {
 
             #[inline]
             pub const fn from_element(pos: u8) -> Self {
-                debug_assert!(pos < <Self as $crate::BitFlagSet<u8, $repr>>::BITS);
-                if pos < <Self as $crate::BitFlagSet<u8, $repr>>::BITS {
-                    Self::from_bits_retain((1 as $repr) << pos)
-                } else {
-                    Self::empty()
+                if pos >= <Self as $crate::BitFlagSet<u8, $repr>>::BITS {
+                    panic!("index out of range for capacity");
                 }
+                Self::from_bits_retain((1 as $repr) << pos)
             }
 
             #[inline]
@@ -1158,9 +1172,11 @@ macro_rules! bitflagset {
 
             #[inline]
             pub const fn contains(&self, pos: &u8) -> bool {
-                debug_assert!(*pos < <Self as $crate::BitFlagSet<u8, $repr>>::BITS);
-                *pos < <Self as $crate::BitFlagSet<u8, $repr>>::BITS
-                    && (self.bits() & ((1 as $repr) << *pos) != 0)
+                let pos = *pos;
+                if pos >= <Self as $crate::BitFlagSet<u8, $repr>>::BITS {
+                    panic!("index out of range for capacity");
+                }
+                self.bits() & ((1 as $repr) << pos) != 0
             }
 
             #[inline]
@@ -1370,6 +1386,19 @@ macro_rules! bitflagset {
             }
         }
 
+        impl core::ops::Index<u8> for $name {
+            type Output = bool;
+
+            #[inline]
+            fn index(&self, pos: u8) -> &bool {
+                let cap = <Self as $crate::BitFlagSet<u8, $repr>>::BITS;
+                if pos >= cap {
+                    $crate::__private::panic_index_out_of_range(pos as usize, cap as usize);
+                }
+                $crate::__private::bit_ref(self.bits() & ((1 as $repr) << pos) != 0)
+            }
+        }
+
         impl core::iter::IntoIterator for $name {
             type Item = u8;
             type IntoIter = $crate::PrimBitSetIter<$repr, u8>;
@@ -1565,6 +1594,8 @@ macro_rules! bitflagset {
 /// applies to every use of that constant.
 ///
 /// Methods that mutate bits take `&self` (atomic interior mutability).
+/// An out-of-range bit index panics in every build from `contains`, `insert`,
+/// `remove`, `set`, `toggle`, and `Index`.
 #[macro_export]
 macro_rules! atomic_bitflagset {
     // Preferred syntax: linked set (enum form or position form).
@@ -1937,6 +1968,24 @@ macro_rules! atomic_bitflagset {
             }
         }
 
+        impl core::ops::Index<$typ> for $name {
+            type Output = bool;
+
+            #[inline]
+            fn index(&self, value: $typ) -> &bool {
+                let shift = value as u8;
+                let cap = (core::mem::size_of::<$atomic>() * 8) as u8;
+                if shift >= cap {
+                    $crate::__private::panic_index_out_of_range(shift as usize, cap as usize);
+                }
+                let bits = self.0.as_bits().load(core::sync::atomic::Ordering::Relaxed);
+                $crate::__private::bit_ref(
+                    bits & ((1 as <$atomic as $crate::__private::radium::Radium>::Item) << shift)
+                        != 0,
+                )
+            }
+        }
+
         impl core::fmt::Debug for $name
         where
             $typ: core::fmt::Debug + TryFrom<u8>,
@@ -2038,13 +2087,11 @@ macro_rules! atomic_bitflagset {
 
             #[inline]
             pub fn from_element(pos: u8) -> Self {
-                let max = (core::mem::size_of::<$atomic>() * 8) as u8;
-                debug_assert!(pos < max);
-                if pos < max {
-                    Self::from_raw((1 as <$atomic as $crate::__private::radium::Radium>::Item) << pos)
-                } else {
-                    Self::empty()
+                let cap = (core::mem::size_of::<$atomic>() * 8) as u8;
+                if pos >= cap {
+                    $crate::__private::panic_index_out_of_range(pos as usize, cap as usize);
                 }
+                Self::from_raw((1 as <$atomic as $crate::__private::radium::Radium>::Item) << pos)
             }
 
             #[inline]
@@ -2155,6 +2202,22 @@ macro_rules! atomic_bitflagset {
                     }
                 )*
                 None
+            }
+        }
+
+        impl core::ops::Index<u8> for $name {
+            type Output = bool;
+
+            #[inline]
+            fn index(&self, pos: u8) -> &bool {
+                let cap = (core::mem::size_of::<$atomic>() * 8) as u8;
+                if pos >= cap {
+                    $crate::__private::panic_index_out_of_range(pos as usize, cap as usize);
+                }
+                let bits = self.0.as_bits().load(core::sync::atomic::Ordering::Relaxed);
+                $crate::__private::bit_ref(
+                    bits & ((1 as <$atomic as $crate::__private::radium::Radium>::Item) << pos) != 0,
+                )
             }
         }
 
@@ -2907,27 +2970,66 @@ mod bitflags_mode_tests {
 
     #[cfg(not(debug_assertions))]
     #[test]
-    fn out_of_range_position_is_ignored_in_release() {
-        let mut p = Perms::empty();
-        assert_eq!(Perms::from_element(8), Perms::empty());
+    fn out_of_range_position_slice_is_ignored() {
         assert_eq!(
             Perms::from_slice(&[Perms::READ, 8]),
             Perms::from_element(Perms::READ)
         );
-        assert!(!p.contains(&8));
-        assert!(!p.insert(8));
-        assert!(!p.remove(8));
-        p.set(8, true);
-        p.toggle(8);
-        assert!(p.is_empty());
     }
 
-    #[cfg(debug_assertions)]
     #[test]
-    #[should_panic]
-    fn out_of_range_position_panics_in_debug() {
+    #[should_panic(expected = "index out of range for capacity")]
+    fn from_element_position_out_of_range() {
+        let _ = Perms::from_element(8);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of range for capacity")]
+    fn contains_position_out_of_range() {
         let p = Perms::empty();
         let _ = p.contains(&8);
+    }
+
+    #[test]
+    fn index_reads_position() {
+        let p = Perms::from_element(Perms::READ);
+        assert!(p[Perms::READ]);
+        assert!(!p[Perms::WRITE]);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn index_position_out_of_range() {
+        let p = Perms::empty();
+        let _ = p[8];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn insert_position_out_of_range() {
+        let mut p = Perms::empty();
+        let _ = p.insert(8);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn remove_position_out_of_range() {
+        let mut p = Perms::empty();
+        let _ = p.remove(8);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn set_position_out_of_range() {
+        let mut p = Perms::empty();
+        p.set(8, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn toggle_position_out_of_range() {
+        let mut p = Perms::empty();
+        p.toggle(8);
     }
 
     #[test]
@@ -3039,6 +3141,59 @@ mod atomic_bitflagset_tests {
             const WRITE = 1;
             const EXEC = 2;
         }
+    }
+
+    #[test]
+    fn index_enum_and_position() {
+        let colors = ColorSet::from_element(Color::Red);
+        assert!(colors[Color::Red]);
+        assert!(!colors[Color::Green]);
+
+        let perms = Perms::from_element(Perms::WRITE);
+        assert!(perms[Perms::WRITE]);
+        assert!(!perms[Perms::READ]);
+
+        let atomic_colors = AtomicColorSet::from_element(Color::Blue);
+        assert!(atomic_colors[Color::Blue]);
+        assert!(!atomic_colors[Color::Red]);
+
+        let atomic_perms = AtomicPerms::from_element(AtomicPerms::EXEC);
+        assert!(atomic_perms[AtomicPerms::EXEC]);
+        assert!(!atomic_perms[AtomicPerms::READ]);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn index_position_out_of_range() {
+        let perms = Perms::empty();
+        let _ = perms[8];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn index_atomic_position_out_of_range() {
+        let perms = AtomicPerms::empty();
+        let _ = perms[8];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn atomic_position_contains_out_of_range() {
+        let perms = AtomicPerms::empty();
+        let _ = perms.contains(&8);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn atomic_position_insert_out_of_range() {
+        let perms = AtomicPerms::empty();
+        let _ = perms.insert(8);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 8 out of range for capacity 8")]
+    fn atomic_position_from_element_out_of_range() {
+        let _ = AtomicPerms::from_element(8);
     }
 
     #[test]
@@ -3166,10 +3321,7 @@ mod atomic_bitflagset_tests {
 
     #[cfg(not(debug_assertions))]
     #[test]
-    fn position_form_oob_ignored_in_release() {
-        let atomic = AtomicPerms::from_element(8);
-        assert_eq!(Perms::from(&atomic), Perms::empty());
-
+    fn position_form_oob_slice_ignored() {
         let atomic = AtomicPerms::from_slice(&[Perms::READ, 8]);
         assert_eq!(Perms::from(&atomic), Perms::from_element(Perms::READ));
     }

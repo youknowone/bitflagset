@@ -152,10 +152,10 @@ Slower rows:
 
 Slower rows:
 
-| Row                          |      Ours |    Theirs | Cause                                                                        |
-| ---------------------------- | --------: | --------: | ---------------------------------------------------------------------------- |
-| 256-bit `contains` vs bitvec |   0.89 ns |   0.73 ns | reloads &index; taken bounds branch; 256 interleaved median 1.14 (0.78-1.66) |
-| 65536-bit `len` vs bitvec    | 410.02 ns | 320.48 ns | relaxed load plus popcount per word                                          |
+| Row                          |      Ours |    Theirs | Cause                                                           |
+| ---------------------------- | --------: | --------: | --------------------------------------------------------------- |
+| 256-bit `contains` vs bitvec |   0.89 ns |   0.73 ns | BitArray::get(200) reloads that index and takes a bounds branch |
+| 65536-bit `len` vs bitvec    | 410.02 ns | 320.48 ns | relaxed load plus popcount per word                             |
 
 <!-- BENCH_TABLES:END -->
 
@@ -198,14 +198,21 @@ assert!(a.is_superset(&b));
 
 ### Bounds behavior
 
-For index-based element types (for example `usize`), runtime-index operations
-(`contains`, `insert`, `remove`, `set`, `toggle`) include debug assertions for
-out-of-range indices.
+**Breaking:** out-of-range bit indices now panic in release builds.
 
-- In debug builds, out-of-range indices trigger assertion failures.
-- In release builds, out-of-range indices are ignored (`contains`/`insert`/`remove` return `false`; `set`/`toggle` are no-ops).
+An out-of-range bit index is a caller bug on every set type (primitive, array,
+boxed, atomic, and `bitflagset!` / `atomic_bitflagset!`).
 
-This surfaces mistakes during development while keeping release builds branch-light.
+- `contains` / `insert` / `remove` / `set` / `toggle` / `Index` panic in debug
+  and release with `index {idx} out of range for capacity {cap}`.
+- Const `BitSet<primitive, usize>::contains`, const `from_index`, and const
+  `bitflagset!` `contains` / position `from_element` use the literal
+  `index out of range for capacity` because formatting is not available in
+  `const fn`.
+- `set[i]` (`Index`, output `&bool`) uses the element type as the key, so
+  `set[Color::Red]` and `set[5usize]` both work. There is no `IndexMut`.
+- `from_slice` and `from_bits_*` still accept untrusted input: unknown bits are
+  dropped or rejected as before. Enum `from_element` still debug-asserts.
 
 ### Const construction
 

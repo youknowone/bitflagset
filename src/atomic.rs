@@ -38,6 +38,11 @@ pub use sealed::AtomicPrimStore;
 /// `is_subset()` may observe a mix of old and new state across words under
 /// concurrent mutation.
 ///
+/// Out-of-range indices panic in every build from `contains` / `insert` /
+/// `remove` / `set` / `toggle` / `Index`, with
+/// `index {idx} out of range for capacity {cap}`. `Index` and `contains` load
+/// with `Relaxed`.
+///
 /// `AtomicBitSet<A, V>` has the same layout as `A`.
 #[repr(transparent)]
 pub struct AtomicBitSet<A, V>(pub(crate) A, PhantomData<V>);
@@ -231,14 +236,7 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
         A::Item: PrimInt,
     {
         let idx = (*id).as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
-            return false;
-        }
+        crate::__private::check_bit_index(idx, Self::BITS);
         let store = self.0.load(Ordering::Relaxed);
         let mask = <A::Item as num_traits::One>::one().unsigned_shl(idx as u32);
         store & mask != A::Item::zero()
@@ -264,14 +262,7 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
         A::Item: PrimInt + radium::marker::BitOps,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
-            return false;
-        }
+        crate::__private::check_bit_index(idx, Self::BITS);
         let mask = <A::Item as num_traits::One>::one().unsigned_shl(idx as u32);
         let old = self.0.fetch_or(mask, Ordering::AcqRel);
         old & mask == A::Item::zero()
@@ -284,14 +275,7 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
         A::Item: PrimInt + radium::marker::BitOps,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
-            return false;
-        }
+        crate::__private::check_bit_index(idx, Self::BITS);
         let mask = <A::Item as num_traits::One>::one().unsigned_shl(idx as u32);
         let old = self.0.fetch_and(!mask, Ordering::AcqRel);
         old & mask != A::Item::zero()
@@ -304,14 +288,7 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
         A::Item: PrimInt + radium::marker::BitOps,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < Self::BITS,
-            "index {idx} out of range for capacity {}",
-            Self::BITS
-        );
-        if idx >= Self::BITS {
-            return;
-        }
+        crate::__private::check_bit_index(idx, Self::BITS);
         let mask = <A::Item as One>::one().unsigned_shl(idx as u32);
         self.0.fetch_xor(mask, Ordering::AcqRel);
     }
@@ -416,6 +393,27 @@ impl<A: AtomicPrimStore, V> AtomicBitSet<A, V> {
         let a = self.0.load(Ordering::Relaxed);
         let b = other.0.load(Ordering::Relaxed);
         (a & b).is_zero()
+    }
+}
+
+impl<A, V> core::ops::Index<V> for AtomicBitSet<A, V>
+where
+    A: AtomicPrimStore,
+    A::Item: PrimInt,
+    V: AsPrimitive<usize>,
+{
+    type Output = bool;
+
+    #[inline(always)]
+    fn index(&self, id: V) -> &bool {
+        let idx = id.as_();
+        let cap = Self::BITS;
+        if idx >= cap {
+            crate::__private::panic_index_out_of_range(idx, cap);
+        }
+        let store = self.0.load(Ordering::Relaxed);
+        let mask = A::Item::one().unsigned_shl(idx as u32);
+        crate::__private::bit_ref(store & mask != A::Item::zero())
     }
 }
 
@@ -748,25 +746,93 @@ mod tests {
         assert!(bs.is_empty());
     }
 
-    #[cfg(not(debug_assertions))]
     #[test]
-    fn test_prim_out_of_range_is_ignored() {
-        let bs = AtomicBitSet::<AtomicU64, usize>::new();
-        assert!(!bs.contains(&64));
-        assert!(!bs.insert(64));
-        assert!(!bs.remove(64));
-        bs.toggle(64);
-        assert!(bs.is_empty());
-        assert_eq!(bs.len(), 0);
-        assert!(!bs.contains(&0));
-    }
-
-    #[cfg(debug_assertions)]
-    #[test]
-    #[should_panic]
-    fn test_prim_out_of_range_panics_in_debug() {
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn test_prim_out_of_range_panics() {
         let bs = AtomicBitSet::<AtomicU64, usize>::new();
         let _ = bs.contains(&64);
+    }
+
+    #[test]
+    fn index_prim_and_array() {
+        let prim = AtomicBitSet::<AtomicU64, usize>::new();
+        prim.insert(5);
+        assert!(prim[5]);
+        assert!(!prim[4]);
+
+        let array = AtomicBitSet::<[AtomicU64; 4], usize>::new();
+        array.insert(200);
+        assert!(array[200]);
+        assert!(!array[1]);
+
+        let slice = AtomicBitSlice::<AtomicU64, usize>::from_slice_ref(array.as_raw_slice());
+        assert!(slice[200]);
+        assert!(!slice[1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn index_prim_out_of_range() {
+        let prim = AtomicBitSet::<AtomicU64, usize>::new();
+        let _ = prim[64];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn index_array_out_of_range() {
+        let array = AtomicBitSet::<[AtomicU64; 4], usize>::new();
+        let _ = array[256];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn index_slice_out_of_range() {
+        let word = core::sync::atomic::AtomicU64::new(0);
+        let slice =
+            AtomicBitSlice::<AtomicU64, usize>::from_slice_ref(core::slice::from_ref(&word));
+        let _ = slice[64];
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn insert_prim_out_of_range() {
+        let bs = AtomicBitSet::<AtomicU64, usize>::new();
+        let _ = bs.insert(64);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn remove_prim_out_of_range() {
+        let bs = AtomicBitSet::<AtomicU64, usize>::new();
+        let _ = bs.remove(64);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 64 out of range for capacity 64")]
+    fn toggle_prim_out_of_range() {
+        let bs = AtomicBitSet::<AtomicU64, usize>::new();
+        bs.toggle(64);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn contains_array_out_of_range() {
+        let bs = AtomicBitSet::<[AtomicU64; 4], usize>::new();
+        let _ = bs.contains(&256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn insert_array_out_of_range() {
+        let bs = AtomicBitSet::<[AtomicU64; 4], usize>::new();
+        let _ = bs.insert(256);
+    }
+
+    #[test]
+    #[should_panic(expected = "index 256 out of range for capacity 256")]
+    fn set_array_out_of_range() {
+        let bs = AtomicBitSet::<[AtomicU64; 4], usize>::new();
+        bs.set(256, true);
     }
 
     #[test]

@@ -181,6 +181,10 @@ impl<T: PrimInt, V> Drop for Drain<'_, T, V> {
 ///
 /// Owned types (`BitSet`, `BoxedBitSet`) implement `Deref<Target = BitSlice<T, V>>`
 /// so common methods are defined here once.
+///
+/// Out-of-range bit indices are a caller bug. `contains` / `insert` / `remove` /
+/// `set` / `toggle` / `Index` panic in every build with
+/// `index {idx} out of range for capacity {cap}`.
 #[repr(transparent)]
 pub struct BitSlice<T, V>(PhantomData<V>, [T]);
 
@@ -313,13 +317,12 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         V: Copy + AsPrimitive<usize>,
     {
         let idx = (*id).as_();
-        debug_assert!(
-            idx < self.capacity(),
-            "index {idx} out of range for capacity {}",
-            self.capacity()
-        );
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        self.1.get(seg).is_some_and(|w| *w & mask != T::zero())
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
+        let word = unsafe { *self.1.get_unchecked(seg) };
+        word & mask != T::zero()
     }
 
     #[inline]
@@ -328,15 +331,11 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < self.capacity(),
-            "index {idx} out of range for capacity {}",
-            self.capacity()
-        );
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        let Some(word) = self.1.get_mut(seg) else {
-            return;
-        };
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
+        let word = unsafe { self.1.get_unchecked_mut(seg) };
         if value {
             *word = *word | mask;
         } else if *word & mask != T::zero() {
@@ -350,15 +349,11 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < self.capacity(),
-            "index {idx} out of range for capacity {}",
-            self.capacity()
-        );
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        let Some(word) = self.1.get_mut(seg) else {
-            return false;
-        };
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
+        let word = unsafe { self.1.get_unchecked_mut(seg) };
         let was_absent = *word & mask == T::zero();
         *word = *word | mask;
         was_absent
@@ -370,15 +365,11 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < self.capacity(),
-            "index {idx} out of range for capacity {}",
-            self.capacity()
-        );
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        let Some(word) = self.1.get_mut(seg) else {
-            return false;
-        };
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
+        let word = unsafe { self.1.get_unchecked_mut(seg) };
         if *word & mask == T::zero() {
             return false;
         }
@@ -392,15 +383,12 @@ impl<T: PrimInt, V> BitSlice<T, V> {
         V: AsPrimitive<usize>,
     {
         let idx = id.as_();
-        debug_assert!(
-            idx < self.capacity(),
-            "index {idx} out of range for capacity {}",
-            self.capacity()
-        );
+        let cap = self.capacity();
+        crate::__private::check_bit_index(idx, cap);
         let (seg, mask) = Self::index_of(idx);
-        if let Some(word) = self.1.get_mut(seg) {
-            *word = *word ^ mask;
-        }
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
+        let word = unsafe { self.1.get_unchecked_mut(seg) };
+        *word = *word ^ mask;
     }
 
     #[inline]
@@ -684,5 +672,26 @@ impl<T: PrimInt + BitAndAssign, V> core::fmt::Debug for BitSlice<T, V> {
 impl<T: PrimInt + BitAndAssign, V> core::fmt::Display for BitSlice<T, V> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl<T, V> core::ops::Index<V> for BitSlice<T, V>
+where
+    T: PrimInt,
+    V: AsPrimitive<usize>,
+{
+    type Output = bool;
+
+    #[inline(always)]
+    fn index(&self, id: V) -> &bool {
+        let idx = id.as_();
+        let cap = self.capacity();
+        if idx >= cap {
+            crate::__private::panic_index_out_of_range(idx, cap);
+        }
+        let (seg, mask) = Self::index_of(idx);
+        // SAFETY: idx < capacity() == len * BITS_PER, so seg < len.
+        let word = unsafe { *self.1.get_unchecked(seg) };
+        crate::__private::bit_ref(word & mask != T::zero())
     }
 }

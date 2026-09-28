@@ -202,6 +202,13 @@ macro_rules! bench_all {
                 b.iter(|| black_box(&ba_a)[black_box(probe)])
             });
 
+            g.bench_function("ours/index", |b| {
+                b.iter(|| black_box(&ours_a)[black_box(probe)])
+            });
+            g.bench_function("bitvec/index", |b| {
+                b.iter(|| black_box(&ba_a)[black_box(probe)])
+            });
+
             g.bench_function("ours/insert", |b| {
                 b.iter_batched_ref(
                     || dup(&ours_a),
@@ -244,9 +251,10 @@ macro_rules! bench_all {
                 );
             });
 
-            // `probe` is clear on the 256/1024/65536 groups. This index is set
-            // (`step_by(3)`), so the row times a store that clears a present bit.
+            // `probe` is clear in every group, including 64-bit. `present_bit`
+            // is the nearest lower multiple of 3, which the setup loop sets.
             let present_bit: usize = probe / 3 * 3;
+            assert_ne!(probe, present_bit, "absent and present probes must differ");
             assert!(
                 ours_a.contains(&present_bit),
                 "present bit {present_bit} must be set"
@@ -257,12 +265,18 @@ macro_rules! bench_all {
                 Some(true),
                 "present bit missing on bit-vec"
             );
-            if $bits >= 256 {
-                assert!(
-                    !ours_a.contains(&probe),
-                    "absent rows require a clear probe"
-                );
-            }
+            assert!(ba_a[present_bit], "present bit missing on bitvec");
+            assert!(
+                !ours_a.contains(&probe),
+                "insert/set/absent rows require a clear probe"
+            );
+            assert!(!bs_a.contains(probe), "absent probe is set on bit-set");
+            assert_eq!(
+                bv_a.get(probe),
+                Some(false),
+                "absent probe is set on bit-vec"
+            );
+            assert!(!ba_a[probe], "absent probe is set on bitvec");
 
             g.bench_function("ours/remove_present", |b| {
                 b.iter_batched_ref(
@@ -545,7 +559,7 @@ bench_all!(
     64,
     BitSet<[u64; 1], usize>,
     BitArray<[u64; 1], Lsb0>,
-    42,
+    41,
     BitSet::<[u64; 1], usize>::new(),
     BitArray::<[u64; 1], Lsb0>::ZERO,
     BatchSize::SmallInput
@@ -626,6 +640,13 @@ macro_rules! bench_atomic_fixed {
                 b.iter(|| *black_box(&bv_a).get(black_box($probe)).unwrap())
             });
 
+            g.bench_function("atomic/index", |b| {
+                b.iter(|| black_box(&atomic_a)[black_box($probe)])
+            });
+            g.bench_function("bitvec/index", |b| {
+                b.iter(|| *black_box(&bv_a).get(black_box($probe)).unwrap())
+            });
+
             g.bench_function("atomic/insert", |b| {
                 b.iter(|| {
                     let s = AtomicBitSet::<[AtomicU64; $n], usize>::new();
@@ -684,6 +705,13 @@ fn bench_atomic_64_vs_bitvec(c: &mut Criterion) {
         b.iter(|| black_box(&atomic_a).contains(black_box(&probe)))
     });
     g.bench_function("bitvec/get", |b| {
+        b.iter(|| *black_box(&bv_a).get(black_box(probe)).unwrap())
+    });
+
+    g.bench_function("atomic/index", |b| {
+        b.iter(|| black_box(&atomic_a)[black_box(probe)])
+    });
+    g.bench_function("bitvec/index", |b| {
         b.iter(|| *black_box(&bv_a).get(black_box(probe)).unwrap())
     });
 
@@ -760,10 +788,24 @@ fn bench_atomic_boxed_vs_bitvec(c: &mut Criterion) {
         b.iter(|| *black_box(&bv).get(black_box(probe)).unwrap())
     });
 
+    g.bench_function("atomic/index", |b| {
+        b.iter(|| black_box(&*atomic)[black_box(probe)])
+    });
+    g.bench_function("bitvec/index", |b| {
+        b.iter(|| *black_box(&bv).get(black_box(probe)).unwrap())
+    });
+
     g.bench_function("atomic/insert", |b| {
         b.iter(|| {
             let s = AtomicBoxedBitSet::<AtomicU64, usize>::with_capacity(BITS);
             s.insert(black_box(probe));
+            black_box(&s);
+        })
+    });
+    g.bench_function("bitvec/set_aliased", |b| {
+        b.iter(|| {
+            let s = BitVec::<AtomicU64, Lsb0>::repeat(false, BITS);
+            s.as_bitslice().set_aliased(black_box(probe), true);
             black_box(&s);
         })
     });
