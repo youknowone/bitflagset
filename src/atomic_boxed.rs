@@ -81,7 +81,7 @@ where
     pub fn with_capacity(bits: usize) -> Self {
         let bits_per = core::mem::size_of::<A>() * 8;
         let store_size = bits.div_ceil(bits_per);
-        let mut store = Vec::new();
+        let mut store = Vec::with_capacity(store_size);
         store.resize_with(store_size, A::default);
         Self(store.into_boxed_slice(), PhantomData)
     }
