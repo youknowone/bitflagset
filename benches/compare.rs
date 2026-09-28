@@ -244,6 +244,47 @@ macro_rules! bench_all {
                 );
             });
 
+            // `probe` is clear on the 256/1024/65536 groups. This index is set
+            // (`step_by(3)`), so the row times a store that clears a present bit.
+            let present_bit: usize = probe / 3 * 3;
+            assert!(
+                ours_a.contains(&present_bit),
+                "present bit {present_bit} must be set"
+            );
+            assert!(bs_a.contains(present_bit), "present bit missing on bit-set");
+            assert_eq!(
+                bv_a.get(present_bit),
+                Some(true),
+                "present bit missing on bit-vec"
+            );
+            if $bits >= 256 {
+                assert!(
+                    !ours_a.contains(&probe),
+                    "absent rows require a clear probe"
+                );
+            }
+
+            g.bench_function("ours/remove_present", |b| {
+                b.iter_batched_ref(
+                    || dup(&ours_a),
+                    |s| {
+                        s.remove(black_box(present_bit));
+                        black_box(s);
+                    },
+                    $batch,
+                );
+            });
+            g.bench_function("bitset/remove_present", |b| {
+                b.iter_batched_ref(
+                    || dup(&bs_a),
+                    |s| {
+                        s.remove(black_box(present_bit));
+                        black_box(s);
+                    },
+                    $batch,
+                );
+            });
+
             g.bench_function("ours/set", |b| {
                 b.iter_batched_ref(
                     || dup(&ours_a),
@@ -280,6 +321,27 @@ macro_rules! bench_all {
                     || dup(&bv_a),
                     |s| {
                         s.set(black_box(probe), false);
+                        black_box(s);
+                    },
+                    $batch,
+                );
+            });
+
+            g.bench_function("ours/set_false_present", |b| {
+                b.iter_batched_ref(
+                    || dup(&ours_a),
+                    |s| {
+                        s.set(black_box(present_bit), false);
+                        black_box(s);
+                    },
+                    $batch,
+                );
+            });
+            g.bench_function("bit_vec/set_false_present", |b| {
+                b.iter_batched_ref(
+                    || dup(&bv_a),
+                    |s| {
+                        s.set(black_box(present_bit), false);
                         black_box(s);
                     },
                     $batch,

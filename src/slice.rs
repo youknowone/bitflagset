@@ -29,12 +29,11 @@ impl<S: AsRef<[T]>, T: PrimInt + BitAndAssign, V> WordSetIter<S, T, V> {
 
     #[inline]
     fn remaining_len(&self) -> usize {
-        let words = self.store.as_ref();
-        let mut n = self.current.into_bits().count_ones() as usize;
-        for word in &words[self.word_idx..] {
-            n += word.count_ones() as usize;
-        }
-        n
+        self.current.len()
+            + self.store.as_ref()[self.word_idx..]
+                .iter()
+                .map(|w| w.count_ones() as usize)
+                .sum::<usize>()
     }
 }
 
@@ -110,11 +109,11 @@ pub struct Drain<'a, T: PrimInt, V> {
 impl<T: PrimInt + BitAndAssign, V> Drain<'_, T, V> {
     #[inline]
     fn remaining_len(&self) -> usize {
-        let mut n = self.current.into_bits().count_ones() as usize;
-        for word in &self.words[self.word_idx..] {
-            n += word.count_ones() as usize;
-        }
-        n
+        self.current.len()
+            + self.words[self.word_idx..]
+                .iter()
+                .map(|w| w.count_ones() as usize)
+                .sum::<usize>()
     }
 }
 
@@ -320,10 +319,7 @@ impl<T: PrimInt, V> BitSlice<T, V> {
             self.capacity()
         );
         let (seg, mask) = Self::index_of(idx);
-        let Some(word) = self.1.get(seg) else {
-            return false;
-        };
-        *word & mask != T::zero()
+        self.1.get(seg).is_some_and(|w| *w & mask != T::zero())
     }
 
     #[inline]

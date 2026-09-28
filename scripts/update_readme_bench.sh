@@ -13,10 +13,10 @@ and updates the README benchmark table block delimited by:
   <!-- BENCH_TABLES:BEGIN -->
   <!-- BENCH_TABLES:END -->
 
-Each table row uses one bitflagset measurement from the same Criterion group
-as every competitor in that row. The printed speedup is competitor/bitflagset
-from the printed times (rounded to 0.1). The script exits non-zero if a
-printed ratio does not match those times.
+Each competitor is a time column plus a × column. The printed ratio is
+competitor/bitflagset from the printed times (one decimal, or an integer
+at 100 or above). The script exits non-zero if a printed ratio does not
+match those times.
 
 Optional environment variables for the load note (ignored by --check, which
 keeps the existing line):
@@ -39,143 +39,10 @@ README_PATH="${REPO_ROOT}/README.md"
 START_MARKER="<!-- BENCH_TABLES:BEGIN -->"
 END_MARKER="<!-- BENCH_TABLES:END -->"
 
-if ! command -v jq >/dev/null 2>&1; then
-    echo "jq is required but was not found in PATH." >&2
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 is required but was not found in PATH." >&2
     exit 1
 fi
-
-median_ns() {
-    local group="$1"
-    local bench="$2"
-    local file="${REPO_ROOT}/target/criterion/${group}/${bench}/new/estimates.json"
-    if [[ ! -f "${file}" ]]; then
-        cat >&2 <<EOF
-Missing benchmark file:
-  ${file}
-
-Run:
-  cargo bench --bench compare
-EOF
-        exit 1
-    fi
-    jq -r '.median.point_estimate' "${file}"
-}
-
-format_time() {
-    awk -v ns="$1" 'BEGIN {
-        if (ns < 1000.0) {
-            printf "%.2f ns", ns;
-        } else if (ns < 1000000.0) {
-            printf "%.2f us", ns / 1000.0;
-        } else {
-            printf "%.2f ms", ns / 1000000.0;
-        }
-    }'
-}
-
-# Ratio of two already-formatted times, so the printed Nx matches the printed
-# numbers under the same %.1f rounding.
-format_speedup_printed() {
-    awk -v ours="$1" -v other="$2" 'BEGIN {
-        if (ours <= 0.0) {
-            print "n/a";
-            exit;
-        }
-        printf "%.1fx", other / ours;
-    }'
-}
-
-time_to_ns() {
-    awk -v text="$1" 'BEGIN {
-        n = split(text, a, " ");
-        if (n < 2) {
-            print "bad-time" > "/dev/stderr";
-            exit 1;
-        }
-        v = a[1] + 0.0;
-        u = a[2];
-        if (u == "ns") {
-            printf "%.10f", v;
-        } else if (u == "us") {
-            printf "%.10f", v * 1000.0;
-        } else if (u == "ms") {
-            printf "%.10f", v * 1000000.0;
-        } else {
-            print "bad-unit" > "/dev/stderr";
-            exit 1;
-        }
-    }'
-}
-
-has_bench() {
-    [[ -f "${REPO_ROOT}/target/criterion/${1}/${2}/new/estimates.json" ]]
-}
-
-ours_time_cell() {
-    local group="$1"
-    local bench="$2"
-    if [[ -z "${bench}" || "${bench}" == "-" ]] || ! has_bench "${group}" "${bench}"; then
-        printf '—'
-        return
-    fi
-    format_time "$(median_ns "${group}" "${bench}")"
-}
-
-comp_cell() {
-    local group="$1"
-    local ours_bench="$2"
-    local their_bench="$3"
-    if [[ -z "${their_bench}" || "${their_bench}" == "-" ]] || ! has_bench "${group}" "${ours_bench}" || ! has_bench "${group}" "${their_bench}"; then
-        printf '—'
-        return
-    fi
-    local ours_fmt their_fmt ours_disp their_disp
-    ours_fmt="$(format_time "$(median_ns "${group}" "${ours_bench}")")"
-    their_fmt="$(format_time "$(median_ns "${group}" "${their_bench}")")"
-    ours_disp="$(time_to_ns "${ours_fmt}")"
-    their_disp="$(time_to_ns "${their_fmt}")"
-    printf '%s (%s)' "${their_fmt}" "$(format_speedup_printed "${ours_disp}" "${their_disp}")"
-}
-
-# label, group, ours bench, bitvec bench, bit-set bench, bit-vec bench.
-# An empty bench id prints an em dash.
-row() {
-    local label="$1"
-    printf '| `%s` | %s | %s | %s | %s |\n' \
-        "${label}" \
-        "$(ours_time_cell "$2" "$3")" \
-        "$(comp_cell "$2" "$3" "$4")" \
-        "$(comp_cell "$2" "$3" "$5")" \
-        "$(comp_cell "$2" "$3" "$6")"
-}
-
-table_header() {
-    cat <<'EOF'
-| Operation | bitflagset | bitvec | bit-set | bit-vec |
-|-----------|------------|--------|---------|---------|
-EOF
-}
-
-# Print one bullet when our median is strictly slower than theirs.
-slower_bullet() {
-    local label="$1"
-    local group="$2"
-    local ours_bench="$3"
-    local their_bench="$4"
-    local cause="$5"
-    if ! has_bench "${group}" "${ours_bench}" || ! has_bench "${group}" "${their_bench}"; then
-        return
-    fi
-    local ours_ns their_ns
-    ours_ns="$(median_ns "${group}" "${ours_bench}")"
-    their_ns="$(median_ns "${group}" "${their_bench}")"
-    awk -v ours="${ours_ns}" -v other="${their_ns}" 'BEGIN { exit !(ours > other) }' || return 0
-    printf -- '- `%s`: bitflagset %s, competitor %s. %s\n' \
-        "${label}" \
-        "$(format_time "${ours_ns}")" \
-        "$(format_time "${their_ns}")" \
-        "${cause}"
-}
 
 existing_bench_date() {
     awk -v start="${START_MARKER}" -v end="${END_MARKER}" '
@@ -230,207 +97,6 @@ load_line() {
     printf 'Load at bench time: before `%s`; after `%s`.\n' "${before}" "${after}"
 }
 
-non_atomic_table() {
-    local bits_label="$1"
-    local storage="$2"
-    local g="$3"
-
-    cat <<EOF
-
-**${bits_label}** (${storage}):
-
-EOF
-    table_header
-    row "insert" "${g}" "ours_insert" "" "bitset_insert" ""
-    row "remove" "${g}" "ours_remove" "" "bitset_remove" ""
-    row "contains / get" "${g}" "ours_contains" "bitvec_get" "bitset_contains" "bit_vec_get"
-    row "len / count" "${g}" "ours_len" "bitvec_count_ones" "bitset_count" "bit_vec_count_ones"
-    row "is_subset" "${g}" "ours_is_subset" "" "bitset_is_subset" ""
-    row "iter" "${g}" "ours_iter" "bitvec_iter_ones" "bitset_iter" ""
-    row "clear" "${g}" "ours_clear" "" "bitset_make_empty" "bit_vec_fill"
-    row "set" "${g}" "ours_set" "" "" "bit_vec_set"
-    row "set_false" "${g}" "ours_set_false" "" "" "bit_vec_set_false"
-    row "union" "${g}" "ours_union" "" "bitset_union" ""
-    row "intersection" "${g}" "ours_intersection" "" "bitset_intersection" ""
-    row "difference" "${g}" "ours_difference" "" "bitset_difference" ""
-    row "union_with / or" "${g}" "ours_union_from" "" "bitset_union_with" "bit_vec_or"
-    row "intersect_with / and" "${g}" "ours_intersect_assign" "" "bitset_intersect_with" "bit_vec_and"
-    row "difference_with" "${g}" "ours_difference_assign" "" "bitset_difference_with" "bit_vec_difference"
-    row "bitor" "${g}" "ours_bitor" "bitvec_bitor" "" ""
-    row "bitand" "${g}" "ours_bitand" "bitvec_bitand" "" ""
-    row "bitxor" "${g}" "ours_bitxor" "bitvec_bitxor" "" ""
-    row "not" "${g}" "ours_not" "bitvec_not" "" ""
-}
-
-atomic_table() {
-    local bits_label="$1"
-    local storage="$2"
-    local group="$3"
-
-    cat <<EOF
-
-**${bits_label}** (${storage}):
-
-EOF
-    table_header
-    row "len" "${group}" "atomic_len" "bitvec_count_ones" "" ""
-    row "is_empty" "${group}" "atomic_is_empty" "bitvec_not_any" "" ""
-    row "contains" "${group}" "atomic_contains" "bitvec_get" "" ""
-    row "insert" "${group}" "atomic_insert" "bitvec_set_aliased" "" ""
-    row "iter" "${group}" "atomic_iter" "bitvec_iter_ones" "" ""
-}
-
-generate_block() {
-    local today load
-    today="$(block_date)"
-    load="$(load_line)"
-
-    cat <<EOF
-All numbers below are Criterion medians from \`cargo bench --bench compare\`, run on Apple M-series (AArch64), collected on **${today}**. This is a shared-machine measurement.  
-${load}
-Each competitor cell is that library's median and how many times bitflagset is faster (\`other / bitflagset\`). The bitflagset column and every competitor in that row come from the **same** Criterion group, so the printed ratio is \`competitor / bitflagset\` on the printed times (rounded to 0.1). \`—\` means that library has no equivalent in the bench.  
-\`iter\`, \`union\`, \`intersection\`, and \`difference\` count iterator items. \`insert\`, \`remove\`, \`set\`, \`set_false\`, \`clear\`, \`union_with\` / \`or\`, \`intersect_with\` / \`and\`, and \`difference_with\` clone the destination in \`iter_batched_ref\` setup and time only the operation. Those in-place ops borrow the other set (\`union_from\`, \`intersect_from\`, \`difference_from\`), matching bit-set \`*_with\` and bit-vec \`or\` / \`and\` / \`difference\`. Fixed-size rows use \`BatchSize::SmallInput\`; the 65536-bit rows use \`BatchSize::LargeInput\`. \`len\` / \`count\` is \`len\` / \`count\` / \`count_ones\`. \`clear\` is \`clear\` / \`make_empty\` / \`fill(false)\`. \`contains\` / \`get\` is \`contains\` / \`get\`. bitvec \`bitor\` / \`bitand\` / \`bitxor\` / \`not\` are by-value operators that build a new set. Atomic \`insert\` builds a fresh set and sets one bit (\`set_aliased\` on bitvec).
-
-### Non-atomic
-
-\`BitSet<[u64; N]>\` / \`BoxedBitSet<u64>\` against bitvec \`BitArray\` / \`BitVec<u64>\`, \`bit_set::BitSet\` (default \`u32\` blocks, \`with_capacity\`), and \`bit_vec::BitVec\` (default \`u32\` blocks, \`from_elem\`). One group per size measures bitflagset and all three libraries.
-EOF
-    non_atomic_table "256-bit" "\`[u64; 4]\`" "256bit"
-    non_atomic_table "1024-bit" "\`[u64; 16]\`" "1024bit"
-    non_atomic_table "65536-bit" "\`BoxedBitSet\`" "65536bit_boxed"
-
-    cat <<'EOF'
-
-`first` / `last` are omitted: `bit-set` and `bit-vec` have neither. bit-set has no owned `|` / `&` / `-`; those producing operators are the bitvec `bitor` / `bitand` / `bitxor` / `not` rows. Iterator `union` / `intersection` / `difference` allocate nothing and count yielded indices. `union_with` / `or`, `intersect_with` / `and`, and `difference_with` are in place (`union_from`, `intersect_from`, `difference_from` versus bit-set `*_with` and bit-vec `or` / `and` / `difference`). `bit-vec` `insert` / `remove` shift the vector, so membership writes are `set` / `set_false`. `bit-vec` has no `is_subset` and no set-index iterator.
-
-Rows that are still slower, and why:
-EOF
-    slower_bullet "256-bit contains / get" "256bit" "ours_contains" "bitvec_get" \
-        "Both read one word. Five interleaved medians overlap (ours 1.1–3.1 ns, bitvec 1.2–2.3 ns)."
-    slower_bullet "256-bit contains / get vs bit-set" "256bit" "ours_contains" "bitset_contains" \
-        "Both read one word. The final paired sample is 1.28 ns vs 1.27 ns."
-    slower_bullet "65536-bit contains / get vs bit-set" "65536bit_boxed" "ours_contains" "bitset_contains" \
-        "Both read one word. Five interleaved runs against bit-vec, the same one-word load, overlapped; this bit-set sample is 1.36 ns vs 1.31 ns."
-    slower_bullet "65536-bit contains / get vs bit-vec" "65536bit_boxed" "ours_contains" "bit_vec_get" \
-        "Both read one word. Five interleaved medians overlap (ours 1.11–1.73 ns, bit-vec 1.19–1.97 ns)."
-    slower_bullet "1024-bit insert" "1024bit" "ours_insert" "bitset_insert" \
-        "Both set one bit in a pre-sized buffer. The final paired sample is 3.09 ns vs 3.02 ns."
-    slower_bullet "1024-bit remove" "1024bit" "ours_remove" "bitset_remove" \
-        "Both clear one bit in a pre-sized buffer. The final paired sample is 3.28 ns vs 3.17 ns."
-    slower_bullet "1024-bit set" "1024bit" "ours_set" "bit_vec_set" \
-        "Both set one bit in a pre-sized buffer. The final paired sample is 3.57 ns vs 3.51 ns."
-    slower_bullet "65536-bit iter" "65536bit_boxed" "ours_iter" "bitset_iter" \
-        "\`iter().count()\` sums \`count_ones\` over the words, the same work as \`len\`. Five interleaved runs were mixed and mostly faster on our side (447–740 ns vs bit-set 486–821 ns), so a single slower sample is load noise."
-    slower_bullet "65536-bit union_with / or" "65536bit_boxed" "ours_union_from" "bit_vec_or" \
-        "Both stream 8 KiB with NEON \`orr.16b\`, 64 bytes per iteration. bit-vec also xors a changed-bit flag. Five interleaved medians overlap, so a single slower sample is load noise."
-    slower_bullet "65536-bit intersect_with / and" "65536bit_boxed" "ours_intersect_assign" "bit_vec_and" \
-        "Both use NEON \`and.16b\`, 64 bytes per iteration. bit-vec also folds a changed-bit flag. Five interleaved medians overlap."
-    slower_bullet "65536-bit difference_with" "65536bit_boxed" "ours_difference_assign" "bit_vec_difference" \
-        "Both use NEON \`bic.16b\`, 64 bytes per iteration. bit-vec also builds a changed-bit mask. Five interleaved medians overlap (ours 257–441 ns, bit-vec 256–301 ns)."
-    slower_bullet "65536-bit clear vs bit-set" "65536bit_boxed" "ours_clear" "bitset_make_empty" \
-        "Both zero 8 KiB with \`memset\` (\`fill(0)\` / \`make_empty\`). Five interleaved medians overlap (ours 140–155 ns, bit-set 142–154 ns)."
-    slower_bullet "65536-bit clear vs bit-vec" "65536bit_boxed" "ours_clear" "bit_vec_fill" \
-        "Both zero 8 KiB with \`memset\`. Five interleaved medians overlap (ours 144–160 ns, bit-vec 142–183 ns)."
-    cat <<'EOF'
-
-### Atomic
-
-`AtomicBitSet<[AtomicU64; N]>` / `AtomicBoxedBitSet` against bitvec `BitArray<AtomicU64>` / `BitVec<AtomicU64>`. bit-set and bit-vec have no atomic storage.
-EOF
-    atomic_table "256-bit" "\`[AtomicU64; 4]\`" "256bit_atomic_vs_bitvec"
-    atomic_table "1024-bit" "\`[AtomicU64; 16]\`" "1024bit_atomic_vs_bitvec"
-    atomic_table "65536-bit" "\`AtomicBoxedBitSet\`" "65536bit_atomic_boxed_vs_bitvec"
-
-    cat <<'EOF'
-
-`is_empty` returns on the first non-zero word. Atomic `contains` loads the word with `Relaxed` ordering. The 65536-bit atomic `insert` column is `—` for bitvec: that bench does not include an aliased set on `BitVec<AtomicU64>`.
-
-Rows that are still slower, and why:
-EOF
-    slower_bullet "256-bit atomic insert" "256bit_atomic_vs_bitvec" "atomic_insert" "bitvec_set_aliased" \
-        "Both build a fresh 32-byte set and set one bit. \`insert\` is \`ldsetal\` (AcqRel) and reports whether the bit was clear; bitvec \`set_aliased\` is relaxed \`ldset\`. Five interleaved runs were faster on our side (2.3–4.3 ns vs 3.1–5.0 ns)."
-    slower_bullet "65536-bit atomic len" "65536bit_atomic_boxed_vs_bitvec" "atomic_len" "bitvec_count_ones" \
-        "Ours is one relaxed \`ldr\` plus \`cnt\` per word. bitvec \`count_ones\` dispatches on the bit-domain and calls \`count_ones\` per word. Five interleaved runs were faster on our side (1.0–1.5 µs vs 1.9–3.2 µs). A plain non-atomic load would race with writers."
-    slower_bullet "256-bit atomic contains" "256bit_atomic_vs_bitvec" "atomic_contains" "bitvec_get" \
-        "Both are one \`Relaxed\` load plus an in-range check. Interleaved samples sit on top of each other around 1–3 ns."
-    slower_bullet "1024-bit atomic contains" "1024bit_atomic_vs_bitvec" "atomic_contains" "bitvec_get" \
-        "Same \`Relaxed\` load and in-range check as the 256-bit row. Five interleaved medians overlap (ours 1.00–2.58 ns, bitvec 0.98–2.59 ns). The ordering is not \`SeqCst\`."
-    cat <<'EOF'
-EOF
-}
-
-# Fail if any printed "(Nx)" is not competitor_time/our_time from the printed
-# cells in that row, rounded with the same %.1f the table uses.
-verify_speedups() {
-    local file="$1"
-    awk '
-        function trim(s) {
-            gsub(/^[ \t]+|[ \t]+$/, "", s);
-            return s;
-        }
-        function to_ns(text,   n, a, v, u) {
-            text = trim(text);
-            n = split(text, a, " ");
-            if (n < 2) {
-                return -1;
-            }
-            v = a[1] + 0.0;
-            u = a[2];
-            if (u == "ns") return v;
-            if (u == "us") return v * 1000.0;
-            if (u == "ms") return v * 1000000.0;
-            return -1;
-        }
-        function printed_ratio(text,   n, a, r) {
-            text = trim(text);
-            n = split(text, a, " ");
-            if (n < 3) {
-                return "";
-            }
-            r = a[3];
-            gsub(/[()x]/, "", r);
-            return r;
-        }
-        /^\| `/ {
-            n = split($0, cells, "|");
-            if (n < 6) {
-                next;
-            }
-            label = trim(cells[2]);
-            ours = trim(cells[3]);
-            if (ours == "—" || ours == "") {
-                ours_ns = -1;
-            } else {
-                ours_ns = to_ns(ours);
-            }
-            for (i = 4; i <= 6; i++) {
-                cell = trim(cells[i]);
-                if (cell == "" || cell == "—") {
-                    continue;
-                }
-                their_ns = to_ns(cell);
-                got = printed_ratio(cell);
-                if (their_ns < 0 || got == "") {
-                    printf "unparsed competitor cell %s in %s\n", cell, label > "/dev/stderr";
-                    err = 1;
-                    continue;
-                }
-                if (ours_ns <= 0) {
-                    printf "speedup without our time in %s\n", label > "/dev/stderr";
-                    err = 1;
-                    continue;
-                }
-                expect = sprintf("%.1f", their_ns / ours_ns);
-                if (expect != got) {
-                    printf "ratio mismatch %s: printed %sx expected %sx from [%s] / [%s]\n", label, got, expect, cell, ours > "/dev/stderr";
-                    err = 1;
-                }
-            }
-        }
-        END { exit err + 0; }
-    ' "${file}"
-}
-
 replace_block() {
     local input="$1"
     local output="$2"
@@ -478,11 +144,10 @@ block_tmp="$(mktemp)"
 readme_tmp="$(mktemp)"
 trap 'rm -f "${block_tmp}" "${readme_tmp}"' EXIT
 
-generate_block > "${block_tmp}"
-if ! verify_speedups "${block_tmp}"; then
-    echo "Printed speedups do not match competitor_time / our_time." >&2
-    exit 1
-fi
+BENCH_DATE="$(block_date)"
+BENCH_LOAD="$(load_line)"
+export REPO_ROOT BENCH_DATE BENCH_LOAD
+python3 "${SCRIPT_DIR}/readme_bench_tables.py" > "${block_tmp}"
 replace_block "${README_PATH}" "${readme_tmp}" "${block_tmp}"
 
 if [[ "${CHECK_MODE}" -eq 1 ]]; then
