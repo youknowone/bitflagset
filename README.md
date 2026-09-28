@@ -240,6 +240,8 @@ assert_eq!(diff, Perms::from_element(Perms::EXEC));
 
 Both forms share the same `Set`-like interface: `contains(&V)`, `insert(V) -> bool`, `remove(V) -> bool`, `is_subset`, `is_superset`, `is_disjoint`, plus full bit operators (`|`, `&`, `^`, `-`, `!`).
 
+Generated `bitflagset!` and `atomic_bitflagset!` structs are `#[repr(transparent)]` over their storage (`u64`, `AtomicU64`, ...), and `AtomicBitSet<A, V>` has the same layout as `A`. `#[cfg]` (and doc comments) on a position-form constant apply everywhere that constant is named, so a disabled flag is omitted from `all()`, names, and `Debug`. `atomic_bitflagset!(struct AtomicX(AtomicU64) on X)` links either an enum-form or a position-form `X` without repeating its constants.
+
 ### bitvec interop (optional)
 
 Enable the `bitvec` feature to get zero-cost conversions:

@@ -37,6 +37,9 @@ pub use sealed::AtomicPrimStore;
 /// transactional guarantee. Composite queries like `len()`, `iter()`, or
 /// `is_subset()` may observe a mix of old and new state across words under
 /// concurrent mutation.
+///
+/// `AtomicBitSet<A, V>` has the same layout as `A`.
+#[repr(transparent)]
 pub struct AtomicBitSet<A, V>(pub(crate) A, PhantomData<V>);
 
 impl<A: AtomicPrimStore, V> core::fmt::Debug for AtomicBitSet<A, V>
@@ -620,6 +623,28 @@ mod tests {
     use core::sync::atomic::{AtomicU32, AtomicU64};
     use proptest::prelude::*;
     use rand::Rng;
+
+    #[test]
+    fn layout_matches_storage() {
+        use core::mem::{align_of, size_of};
+
+        assert_eq!(
+            size_of::<AtomicBitSet<AtomicU64, usize>>(),
+            size_of::<AtomicU64>()
+        );
+        assert_eq!(
+            align_of::<AtomicBitSet<AtomicU64, usize>>(),
+            align_of::<AtomicU64>()
+        );
+        assert_eq!(
+            size_of::<AtomicBitSet<[AtomicU64; 4], usize>>(),
+            size_of::<[AtomicU64; 4]>()
+        );
+        assert_eq!(
+            align_of::<AtomicBitSet<[AtomicU64; 4], usize>>(),
+            align_of::<[AtomicU64; 4]>()
+        );
+    }
 
     #[test]
     fn test_array_iter_basic() {

@@ -2,7 +2,7 @@
 
 extern crate self as bitflagset;
 
-#[cfg(feature = "alloc")]
+#[cfg(any(feature = "alloc", test))]
 extern crate alloc;
 
 mod atomic;
