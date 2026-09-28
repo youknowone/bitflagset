@@ -152,10 +152,10 @@ Slower rows:
 
 Slower rows:
 
-| Row                          |      Ours |    Theirs | Cause                               |
-| ---------------------------- | --------: | --------: | ----------------------------------- |
-| 256-bit `contains` vs bitvec |   0.89 ns |   0.73 ns | one Relaxed load                    |
-| 65536-bit `len` vs bitvec    | 410.02 ns | 320.48 ns | relaxed load plus popcount per word |
+| Row                          |      Ours |    Theirs | Cause                                                                        |
+| ---------------------------- | --------: | --------: | ---------------------------------------------------------------------------- |
+| 256-bit `contains` vs bitvec |   0.89 ns |   0.73 ns | reloads &index; taken bounds branch; 256 interleaved median 1.14 (0.78-1.66) |
+| 65536-bit `len` vs bitvec    | 410.02 ns | 320.48 ns | relaxed load plus popcount per word                                          |
 
 <!-- BENCH_TABLES:END -->
 

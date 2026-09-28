@@ -110,7 +110,7 @@ CAUSES = {
     ("union_with / or", "bit-vec"): "both stream NEON orr",
     ("intersect_with / and", "bit-vec"): "NEON and, plus a changed-bit flag",
     ("difference_with", "bit-vec"): "NEON bic, plus a changed-bit mask",
-    ("contains", "bitvec"): "one Relaxed load",
+    ("contains", "bitvec"): "reloads &index; taken bounds branch; 256 interleaved median 1.14 (0.78-1.66)",
     ("len", "bitvec"): "relaxed load plus popcount per word",
     ("insert", "bitvec"): "fresh set, then one atomic bit set",
     ("is_empty", "bitvec"): "returns on the first non-zero word",
