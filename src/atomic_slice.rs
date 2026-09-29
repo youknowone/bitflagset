@@ -1,4 +1,5 @@
 use core::hash::{Hash, Hasher};
+use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::ops::BitAndAssign;
 use core::sync::atomic::Ordering;
@@ -270,18 +271,12 @@ where
         A::Item: BitAndAssign,
         V: TryFrom<usize>,
     {
-        self.1.iter().enumerate().flat_map(move |(i, a)| {
-            let bits = a.load(Ordering::Relaxed);
-            let offset = i * Self::BITS_PER;
-            PrimBitSetIter::<A::Item, usize>(bits, PhantomData).map(move |pos| {
-                let idx = offset + pos;
-                debug_assert!(V::try_from(idx).is_ok());
-                match V::try_from(idx) {
-                    Ok(v) => v,
-                    Err(_) => unsafe { core::hint::unreachable_unchecked() },
-                }
-            })
-        })
+        AtomicSliceIter {
+            words: &self.1,
+            word_idx: 0,
+            current: PrimBitSetIter::empty(),
+            _marker: PhantomData,
+        }
     }
 
     #[inline]
@@ -314,37 +309,19 @@ where
         })
     }
 
-    fn word_op_iter<'a>(
+    #[inline]
+    fn word_op_iter<'a, F>(
         a: &'a [A],
         b: &'a [A],
         len: usize,
-        op: impl Fn(A::Item, A::Item) -> A::Item + 'a,
+        op: F,
     ) -> impl Iterator<Item = V> + 'a
     where
         A::Item: BitAndAssign,
-        V: TryFrom<usize>,
+        V: TryFrom<usize> + 'a,
+        F: Fn(A::Item, A::Item) -> A::Item + 'a,
     {
-        let bits_per = Self::BITS_PER;
-        (0..len).flat_map(move |i| {
-            let w_a = a
-                .get(i)
-                .map(|a| a.load(Ordering::Relaxed))
-                .unwrap_or(A::Item::zero());
-            let w_b = b
-                .get(i)
-                .map(|a| a.load(Ordering::Relaxed))
-                .unwrap_or(A::Item::zero());
-            let combined = op(w_a, w_b);
-            let offset = i * bits_per;
-            PrimBitSetIter::<A::Item, usize>(combined, PhantomData).map(move |pos| {
-                let idx = offset + pos;
-                debug_assert!(V::try_from(idx).is_ok());
-                match V::try_from(idx) {
-                    Ok(v) => v,
-                    Err(_) => unsafe { core::hint::unreachable_unchecked() },
-                }
-            })
-        })
+        crate::word_op::WordOpIter::bounded(a, b, len, op, |word: &A| word.load(Ordering::Relaxed))
     }
 
     #[inline]
@@ -422,6 +399,103 @@ where
             atomic.fetch_or(value, Ordering::AcqRel);
         }
     }
+}
+
+/// Set bits of an [`AtomicBitSlice`], one relaxed load per word.
+///
+/// `word_idx` is the next word to load. The live word, if any, is `word_idx - 1`.
+struct AtomicSliceIter<'a, A, V>
+where
+    A: Radium,
+    A::Item: PrimInt,
+{
+    words: &'a [A],
+    word_idx: usize,
+    current: PrimBitSetIter<A::Item, usize>,
+    _marker: PhantomData<V>,
+}
+
+impl<A, V> AtomicSliceIter<'_, A, V>
+where
+    A: Radium,
+    A::Item: PrimInt + BitAndAssign,
+{
+    #[inline]
+    fn bits_per() -> usize {
+        core::mem::size_of::<A::Item>() * 8
+    }
+
+    #[inline]
+    fn remaining_len(&self) -> usize {
+        self.current.len()
+            + self.words[self.word_idx..]
+                .iter()
+                .map(|word| word.load(Ordering::Relaxed).count_ones() as usize)
+                .sum::<usize>()
+    }
+}
+
+impl<A, V> Iterator for AtomicSliceIter<'_, A, V>
+where
+    A: Radium,
+    A::Item: PrimInt + BitAndAssign,
+    V: TryFrom<usize>,
+{
+    type Item = V;
+
+    #[inline]
+    fn next(&mut self) -> Option<V> {
+        let bits_per = Self::bits_per();
+        loop {
+            if let Some(pos) = self.current.next() {
+                let base = (self.word_idx - 1) * bits_per;
+                return Some(crate::word_op::bit_index(base + pos));
+            }
+            if self.word_idx >= self.words.len() {
+                return None;
+            }
+            let words = self.words;
+            let loaded = words[self.word_idx].load(Ordering::Relaxed);
+            self.word_idx += 1;
+            self.current = PrimBitSetIter::from_raw(loaded);
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let unseen = self.words.len().saturating_sub(self.word_idx);
+        crate::word_op::conservative_size_hint(self.current.len(), unseen, Self::bits_per())
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.remaining_len()
+    }
+
+    #[inline]
+    fn fold<Acc, G>(self, mut acc: Acc, mut g: G) -> Acc
+    where
+        G: FnMut(Acc, V) -> Acc,
+    {
+        let bits_per = Self::bits_per();
+        let current_base = self.word_idx.saturating_sub(1) * bits_per;
+        acc = crate::word_op::fold_word_bits(acc, self.current.0, current_base, &mut g);
+        let mut base = self.word_idx * bits_per;
+        for word in &self.words[self.word_idx..] {
+            let loaded = word.load(Ordering::Relaxed);
+            acc = crate::word_op::fold_word_bits(acc, loaded, base, &mut g);
+            base += bits_per;
+        }
+        acc
+    }
+}
+
+impl<A, V> FusedIterator for AtomicSliceIter<'_, A, V>
+where
+    A: Radium,
+    A::Item: PrimInt + BitAndAssign,
+    V: TryFrom<usize>,
+{
 }
 
 impl<A, V> Hash for AtomicBitSlice<A, V>

@@ -14,6 +14,7 @@ mod bitset;
 mod boxed;
 mod enumset;
 mod slice;
+mod word_op;
 
 pub use atomic::*;
 #[cfg(feature = "alloc")]
