@@ -190,7 +190,7 @@ macro_rules! bench_all {
             });
 
             g.bench_function("ours/contains", |b| {
-                b.iter(|| black_box(&ours_a).contains(black_box(&probe)))
+                b.iter(|| black_box(&ours_a).contains(&black_box(probe)))
             });
             g.bench_function("bitset/contains", |b| {
                 b.iter(|| black_box(&bs_a).contains(black_box(probe)))
@@ -634,7 +634,7 @@ macro_rules! bench_atomic_fixed {
             g.bench_function("bitvec/not_any", |b| b.iter(|| black_box(&bv_a).not_any()));
 
             g.bench_function("atomic/contains", |b| {
-                b.iter(|| black_box(&atomic_a).contains(black_box(&$probe)))
+                b.iter(|| black_box(&atomic_a).contains(&black_box($probe)))
             });
             g.bench_function("bitvec/get", |b| {
                 b.iter(|| *black_box(&bv_a).get(black_box($probe)).unwrap())
@@ -702,7 +702,7 @@ fn bench_atomic_64_vs_bitvec(c: &mut Criterion) {
     g.bench_function("bitvec/not_any", |b| b.iter(|| black_box(&bv_a).not_any()));
 
     g.bench_function("atomic/contains", |b| {
-        b.iter(|| black_box(&atomic_a).contains(black_box(&probe)))
+        b.iter(|| black_box(&atomic_a).contains(&black_box(probe)))
     });
     g.bench_function("bitvec/get", |b| {
         b.iter(|| *black_box(&bv_a).get(black_box(probe)).unwrap())
@@ -782,7 +782,7 @@ fn bench_atomic_boxed_vs_bitvec(c: &mut Criterion) {
     g.bench_function("bitvec/not_any", |b| b.iter(|| black_box(&bv).not_any()));
 
     g.bench_function("atomic/contains", |b| {
-        b.iter(|| black_box(&*atomic).contains(black_box(&probe)))
+        b.iter(|| black_box(&*atomic).contains(&black_box(probe)))
     });
     g.bench_function("bitvec/get", |b| {
         b.iter(|| *black_box(&bv).get(black_box(probe)).unwrap())
