@@ -14,6 +14,7 @@ mod bitset;
 mod boxed;
 mod enumset;
 mod slice;
+mod word_op;
 
 pub use atomic::*;
 #[cfg(feature = "alloc")]
@@ -52,9 +53,6 @@ pub mod __private {
     /// `&true` / `&false` for `Index<Output = bool>`.
     #[inline(always)]
     pub fn bit_ref(on: bool) -> &'static bool {
-        static TABLE: [bool; 2] = [false, true];
-        let idx = on as usize;
-        // SAFETY: `bool as usize` is 0 or 1, and `TABLE` has length 2.
-        unsafe { TABLE.get_unchecked(idx) }
+        if on { &true } else { &false }
     }
 }

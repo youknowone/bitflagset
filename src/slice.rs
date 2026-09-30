@@ -510,31 +510,19 @@ impl<T: PrimInt, V> BitSlice<T, V> {
             .all(|(a, b)| (*a & *b).is_zero())
     }
 
-    fn word_op_iter<'a>(
+    #[inline]
+    fn word_op_iter<'a, F>(
         a: &'a [T],
         b: &'a [T],
         len: usize,
-        op: impl Fn(T, T) -> T + 'a,
+        op: F,
     ) -> impl Iterator<Item = V> + 'a
     where
         T: BitAndAssign,
-        V: TryFrom<usize>,
+        V: TryFrom<usize> + 'a,
+        F: Fn(T, T) -> T + 'a,
     {
-        let bits_per = Self::BITS_PER;
-        (0..len).flat_map(move |i| {
-            let w_a = a.get(i).copied().unwrap_or(T::zero());
-            let w_b = b.get(i).copied().unwrap_or(T::zero());
-            let combined = op(w_a, w_b);
-            let offset = i * bits_per;
-            PrimBitSetIter::<T, usize>(combined, PhantomData).map(move |pos| {
-                let idx = offset + pos;
-                debug_assert!(V::try_from(idx).is_ok());
-                match V::try_from(idx) {
-                    Ok(v) => v,
-                    Err(_) => unsafe { core::hint::unreachable_unchecked() },
-                }
-            })
-        })
+        crate::word_op::WordOpIter::exact(a, b, len, op, |word: &T| *word)
     }
 
     #[inline]

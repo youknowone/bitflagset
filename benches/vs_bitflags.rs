@@ -73,7 +73,7 @@ fn bench_64_vs_bitflags(c: &mut Criterion) {
     });
 
     g.bench_function("ours/contains", |b| {
-        b.iter(|| black_box(&ours_a).contains(black_box(&probe)))
+        b.iter(|| black_box(&ours_a).contains(&black_box(probe)))
     });
     g.bench_function("bitflags/contains", |b| {
         b.iter(|| black_box(&bf_a).contains(black_box(mask_of(probe))))
