@@ -17,7 +17,7 @@ Type-safe bitsets with `Set`-like ergonomics. Operations are direct primitive bi
 ## Performance
 
 <!-- BENCH_TABLES:BEGIN -->
-All numbers below are Criterion medians from `cargo bench --bench compare`, collected on **2026-09-28**.
+All numbers below are Criterion medians from `cargo bench --bench compare`, collected on **2026-09-30**.
 Each competitor is two columns: its median, then `×` = `their time / bitflagset` on the **printed** times (one decimal, or an integer at 100 or above, e.g. `2.3×`, `1202×`). The bitflagset time and every competitor in that row come from the same Criterion group. A ratio in italics is a row where bitflagset's raw median is slower. `—` means that library has no equivalent in the bench. A column pair that is `—` on every row is dropped, and a row with no competitor value is dropped.  
 `iter`, `union`, `intersection`, and `difference` count iterator items. `insert`, `remove`, `set`, `set_false`, `clear`, `union_with` / `or`, `intersect_with` / `and`, and `difference_with` clone the destination in `iter_batched_ref` setup and time only the operation. Those in-place ops borrow the other set (`union_from`, `intersect_from`, `difference_from`), matching bit-set `*_with` and bit-vec `or` / `and` / `difference`. Fixed-size rows use `BatchSize::SmallInput`; the 65536-bit rows use `BatchSize::LargeInput`. `len` / `count` is `len` / `count` / `count_ones`. `clear` is `clear` / `make_empty` / `fill(false)`. `contains` / `get` is `contains` / `get`. bitvec `bitor` / `bitand` / `bitxor` / `not` are by-value operators that build a new set. Atomic `insert` builds a fresh set and sets one bit (`set_aliased` on bitvec). On the 256/1024/65536 tables, `(absent)` uses a clear bit and `(present)` uses a set bit.
 
@@ -29,90 +29,88 @@ Each competitor is two columns: its median, then `×` = `their time / bitflagset
 
 | Operation              | bitflagset |   bitvec |     × |  bit-set |    × | bit-vec |    × |
 | ---------------------- | ---------: | -------: | ----: | -------: | ---: | ------: | ---: |
-| `insert`               |    0.59 ns |        — |     — |  1.93 ns | 3.3× |       — |    — |
-| `remove (absent)`      |    0.58 ns |        — |     — |  1.39 ns | 2.4× |       — |    — |
-| `remove (present)`     |    0.68 ns |        — |     — |  1.41 ns | 2.1× |       — |    — |
-| `contains / get`       |    0.80 ns |  0.88 ns |  1.1× |  0.87 ns | 1.1× | 2.77 ns | 3.5× |
-| `len / count`          |    0.62 ns |  2.27 ns |  3.7× |  1.86 ns | 3.0× | 1.87 ns | 3.0× |
-| `is_subset`            |    0.47 ns |        — |     — |  1.33 ns | 2.8× |       — |    — |
-| `iter`                 |    0.82 ns |  2.97 ns |  3.6× |  2.52 ns | 3.1× |       — |    — |
-| `clear`                |    1.63 ns |        — |     — |  2.50 ns | 1.5× | 2.48 ns | 1.5× |
-| `set`                  |    0.68 ns |        — |     — |        — |    — | 1.86 ns | 2.7× |
-| `set_false (absent)`   |    0.50 ns |        — |     — |        — |    — | 1.70 ns | 3.4× |
-| `set_false (present)`  |    0.70 ns |        — |     — |        — |    — | 2.13 ns | 3.0× |
-| `union`                |    2.57 ns |        — |     — | 12.18 ns | 4.7× |       — |    — |
-| `intersection`         |    2.16 ns |        — |     — |  6.97 ns | 3.2× |       — |    — |
-| `difference`           |    1.82 ns |        — |     — |  8.96 ns | 4.9× |       — |    — |
-| `union_with / or`      |    1.52 ns |        — |     — |  7.58 ns | 5.0× | 2.75 ns | 1.8× |
-| `intersect_with / and` |    2.00 ns |        — |     — |  6.12 ns | 3.1× | 2.77 ns | 1.4× |
-| `difference_with`      |    1.29 ns |        — |     — |  6.59 ns | 5.1× | 2.61 ns | 2.0× |
-| `bitor`                |    1.45 ns | 22.09 ns | 15.2× |        — |    — |       — |    — |
-| `bitand`               |    1.51 ns | 31.17 ns | 20.6× |        — |    — |       — |    — |
-| `bitxor`               |    2.07 ns | 24.48 ns | 11.8× |        — |    — |       — |    — |
-| `not`                  |    1.44 ns |  1.98 ns |  1.4× |        — |    — |       — |    — |
+| `insert`               |    0.58 ns |        — |     — |  1.67 ns | 2.9× |       — |    — |
+| `remove (absent)`      |    0.63 ns |        — |     — |  1.28 ns | 2.0× |       — |    — |
+| `remove (present)`     |    0.83 ns |        — |     — |  1.52 ns | 1.8× |       — |    — |
+| `contains / get`       |    0.82 ns |  1.09 ns |  1.3× |  1.17 ns | 1.4× | 1.09 ns | 1.3× |
+| `index`                |    0.82 ns |  1.09 ns |  1.3× |        — |    — |       — |    — |
+| `len / count`          |    2.09 ns |  8.45 ns |  4.0× |  5.01 ns | 2.4× | 5.01 ns | 2.4× |
+| `is_subset`            |    0.82 ns |        — |     — |  1.69 ns | 2.1× |       — |    — |
+| `iter`                 |    2.09 ns |  8.46 ns |  4.0× |  7.13 ns | 3.4× |       — |    — |
+| `clear`                |    0.57 ns |        — |     — |  2.51 ns | 4.4× | 2.78 ns | 4.9× |
+| `set`                  |    0.58 ns |        — |     — |        — |    — | 2.28 ns | 3.9× |
+| `set_false (absent)`   |    0.63 ns |        — |     — |        — |    — | 1.99 ns | 3.2× |
+| `set_false (present)`  |    0.83 ns |        — |     — |        — |    — | 1.97 ns | 2.4× |
+| `union`                |    5.89 ns |        — |     — | 13.99 ns | 2.4× |       — |    — |
+| `intersection`         |    5.18 ns |        — |     — | 13.75 ns | 2.7× |       — |    — |
+| `difference`           |    6.07 ns |        — |     — | 13.77 ns | 2.3× |       — |    — |
+| `union_with / or`      |    1.36 ns |        — |     — |  9.05 ns | 6.7× | 8.22 ns | 6.0× |
+| `intersect_with / and` |    1.60 ns |        — |     — |  8.77 ns | 5.5× | 8.21 ns | 5.1× |
+| `difference_with`      |    1.41 ns |        — |     — |  9.10 ns | 6.5× | 8.62 ns | 6.1× |
+| `bitor`                |    2.85 ns | 51.58 ns | 18.1× |        — |    — |       — |    — |
+| `bitand`               |    2.85 ns | 51.54 ns | 18.1× |        — |    — |       — |    — |
+| `bitxor`               |    2.85 ns | 51.56 ns | 18.1× |        — |    — |       — |    — |
+| `not`                  |    2.09 ns |  2.69 ns |  1.3× |        — |    — |       — |    — |
 
 **1024-bit** (`[u64; 16]`):
 
-| Operation              | bitflagset |    bitvec |      × |  bit-set |    × | bit-vec |      × |
-| ---------------------- | ---------: | --------: | -----: | -------: | ---: | ------: | -----: |
-| `insert`               |    1.98 ns |         — |      — |  3.48 ns | 1.8× |       — |      — |
-| `remove (absent)`      |    1.89 ns |         — |      — |  2.30 ns | 1.2× |       — |      — |
-| `remove (present)`     |    2.57 ns |         — |      — |  2.69 ns | 1.0× |       — |      — |
-| `contains / get`       |    0.78 ns |   1.20 ns |   1.5× |  0.96 ns | 1.2× | 4.08 ns |   5.2× |
-| `len / count`          |    2.11 ns |   2.71 ns |   1.3× |  3.53 ns | 1.7× | 3.60 ns |   1.7× |
-| `is_subset`            |    0.63 ns |         — |      — |  1.13 ns | 1.8× |       — |      — |
-| `iter`                 |    2.47 ns |   2.43 ns | *1.0×* |  5.87 ns | 2.4× |       — |      — |
-| `clear`                |    2.52 ns |         — |      — |  2.93 ns | 1.2× | 2.77 ns |   1.1× |
-| `set`                  |    2.40 ns |         — |      — |        — |    — | 3.49 ns |   1.5× |
-| `set_false (absent)`   |    2.51 ns |         — |      — |        — |    — | 3.49 ns |   1.4× |
-| `set_false (present)`  |    3.32 ns |         — |      — |        — |    — | 3.20 ns | *1.0×* |
-| `union`                |    8.35 ns |         — |      — | 46.44 ns | 5.6× |       — |      — |
-| `intersection`         |    9.29 ns |         — |      — | 29.97 ns | 3.2× |       — |      — |
-| `difference`           |    6.79 ns |         — |      — | 30.98 ns | 4.6× |       — |      — |
-| `union_with / or`      |    3.95 ns |         — |      — | 24.55 ns | 6.2× | 6.04 ns |   1.5× |
-| `intersect_with / and` |    4.18 ns |         — |      — | 21.09 ns | 5.0× | 5.72 ns |   1.4× |
-| `difference_with`      |    3.70 ns |         — |      — | 20.40 ns | 5.5× | 6.82 ns |   1.8× |
-| `bitor`                |    8.05 ns | 107.74 ns |  13.4× |        — |    — |       — |      — |
-| `bitand`               |    6.80 ns | 100.63 ns |  14.8× |        — |    — |       — |      — |
-| `bitxor`               |    5.87 ns | 109.65 ns |  18.7× |        — |    — |       — |      — |
-| `not`                  |    4.70 ns |   6.65 ns |   1.4× |        — |    — |       — |      — |
+| Operation              | bitflagset |    bitvec |     × |  bit-set |    × |  bit-vec |    × |
+| ---------------------- | ---------: | --------: | ----: | -------: | ---: | -------: | ---: |
+| `insert`               |    1.24 ns |         — |     — |  2.37 ns | 1.9× |        — |    — |
+| `remove (absent)`      |    1.25 ns |         — |     — |  1.83 ns | 1.5× |        — |    — |
+| `remove (present)`     |    1.62 ns |         — |     — |  2.28 ns | 1.4× |        — |    — |
+| `contains / get`       |    0.82 ns |   1.09 ns |  1.3× |  1.16 ns | 1.4× |  1.09 ns | 1.3× |
+| `index`                |    0.82 ns |   1.09 ns |  1.3× |        — |    — |        — |    — |
+| `len / count`          |    7.59 ns |  32.47 ns |  4.3× | 18.25 ns | 2.4× | 18.25 ns | 2.4× |
+| `is_subset`            |    0.82 ns |         — |     — |  1.70 ns | 2.1× |        — |    — |
+| `iter`                 |    7.60 ns |  32.44 ns |  4.3× | 18.49 ns | 2.4× |        — |    — |
+| `clear`                |    2.21 ns |         — |     — |  2.58 ns | 1.2× |  2.55 ns | 1.2× |
+| `set`                  |    1.23 ns |         — |     — |        — |    — |  2.57 ns | 2.1× |
+| `set_false (absent)`   |    1.25 ns |         — |     — |        — |    — |  2.58 ns | 2.1× |
+| `set_false (present)`  |    1.54 ns |         — |     — |        — |    — |  2.57 ns | 1.7× |
+| `union`                |    9.43 ns |         — |     — | 53.71 ns | 5.7× |        — |    — |
+| `intersection`         |    9.16 ns |         — |     — | 53.69 ns | 5.9× |        — |    — |
+| `difference`           |    9.30 ns |         — |     — | 53.72 ns | 5.8× |        — |    — |
+| `union_with / or`      |    3.15 ns |         — |     — | 28.56 ns | 9.1× |  6.54 ns | 2.1× |
+| `intersect_with / and` |    3.13 ns |         — |     — | 28.57 ns | 9.1× |  6.51 ns | 2.1× |
+| `difference_with`      |    3.15 ns |         — |     — | 28.61 ns | 9.1× |  6.97 ns | 2.2× |
+| `bitor`                |    9.81 ns | 201.14 ns | 20.5× |        — |    — |        — |    — |
+| `bitand`               |    9.80 ns | 201.09 ns | 20.5× |        — |    — |        — |    — |
+| `bitxor`               |    9.80 ns | 201.18 ns | 20.5× |        — |    — |        — |    — |
+| `not`                  |    7.43 ns |   9.74 ns |  1.3× |        — |    — |        — |    — |
 
 **65536-bit** (`BoxedBitSet`):
 
-| Operation              | bitflagset |    bitvec |     × |   bit-set |      × |   bit-vec |      × |
-| ---------------------- | ---------: | --------: | ----: | --------: | -----: | --------: | -----: |
-| `insert`               |    3.29 ns |         — |     — |   5.02 ns |   1.5× |         — |      — |
-| `remove (absent)`      |    1.94 ns |         — |     — |   1.84 ns | *0.9×* |         — |      — |
-| `remove (present)`     |    3.31 ns |         — |     — |   3.36 ns |   1.0× |         — |      — |
-| `contains / get`       |    1.08 ns |   1.64 ns |  1.5× |   1.42 ns |   1.3× |   4.01 ns |   3.7× |
-| `len / count`          |  124.42 ns | 155.42 ns |  1.2× | 165.33 ns |   1.3× | 223.18 ns |   1.8× |
-| `is_subset`            |    0.81 ns |         — |     — |   1.02 ns |   1.3× |         — |      — |
-| `iter`                 |  143.30 ns | 181.04 ns |  1.3× | 155.00 ns |   1.1× |         — |      — |
-| `clear`                |  114.95 ns |         — |     — | 117.59 ns |   1.0× | 119.26 ns |   1.0× |
-| `set`                  |    3.38 ns |         — |     — |         — |      — |   3.76 ns |   1.1× |
-| `set_false (absent)`   |    1.44 ns |         — |     — |         — |      — |   3.63 ns |   2.5× |
-| `set_false (present)`  |    4.65 ns |         — |     — |         — |      — |   5.46 ns |   1.2× |
-| `union`                |  807.01 ns |         — |     — |   2.61 µs |   3.2× |         — |      — |
-| `intersection`         |  653.95 ns |         — |     — |   1.76 µs |   2.7× |         — |      — |
-| `difference`           |  471.89 ns |         — |     — |   1.72 µs |   3.6× |         — |      — |
-| `union_with / or`      |  165.23 ns |         — |     — |   1.10 µs |   6.7× | 180.54 ns |   1.1× |
-| `intersect_with / and` |  170.35 ns |         — |     — |   1.13 µs |   6.6× | 164.51 ns | *1.0×* |
-| `difference_with`      |  149.99 ns |         — |     — |   1.39 µs |   9.3× | 158.22 ns |   1.1× |
-| `bitor`                |  318.73 ns |   8.71 µs | 27.3× |         — |      — |         — |      — |
-| `bitand`               |  319.26 ns |   6.55 µs | 20.5× |         — |      — |         — |      — |
-| `bitxor`               |  301.23 ns |   6.46 µs | 21.4× |         — |      — |         — |      — |
-| `not`                  |  171.29 ns | 630.76 ns |  3.7× |         — |      — |         — |      — |
+| Operation              | bitflagset |   bitvec |     × |  bit-set |    × |   bit-vec |    × |
+| ---------------------- | ---------: | -------: | ----: | -------: | ---: | --------: | ---: |
+| `insert`               |    1.34 ns |        — |     — |  2.21 ns | 1.6× |         — |    — |
+| `remove (absent)`      |    1.64 ns |        — |     — |  1.80 ns | 1.1× |         — |    — |
+| `remove (present)`     |    1.99 ns |        — |     — |  2.11 ns | 1.1× |         — |    — |
+| `contains / get`       |    0.97 ns |  1.12 ns |  1.2× |  1.16 ns | 1.2× |   1.09 ns | 1.1× |
+| `index`                |    0.97 ns |  1.12 ns |  1.2× |        — |    — |         — |    — |
+| `len / count`          |  511.11 ns |  1.69 µs |  3.3× |  1.13 µs | 2.2× |   1.14 µs | 2.2× |
+| `is_subset`            |    1.20 ns |        — |     — |  1.66 ns | 1.4× |         — |    — |
+| `iter`                 |  511.19 ns |  1.69 µs |  3.3× |  1.13 µs | 2.2× |         — |    — |
+| `clear`                |   77.43 ns |        — |     — | 77.54 ns | 1.0× |  77.64 ns | 1.0× |
+| `set`                  |    1.32 ns |        — |     — |        — |    — |   2.76 ns | 2.1× |
+| `set_false (absent)`   |    1.62 ns |        — |     — |        — |    — |   2.54 ns | 1.6× |
+| `set_false (present)`  |    2.01 ns |        — |     — |        — |    — |   2.48 ns | 1.2× |
+| `union`                |  570.26 ns |        — |     — |  3.36 µs | 5.9× |         — |    — |
+| `intersection`         |  569.65 ns |        — |     — |  3.36 µs | 5.9× |         — |    — |
+| `difference`           |  569.95 ns |        — |     — |  3.36 µs | 5.9× |         — |    — |
+| `union_with / or`      |  178.61 ns |        — |     — |  1.70 µs | 9.5× | 190.21 ns | 1.1× |
+| `intersect_with / and` |  178.78 ns |        — |     — |  1.70 µs | 9.5× | 190.46 ns | 1.1× |
+| `difference_with`      |  178.76 ns |        — |     — |  1.70 µs | 9.5× | 216.20 ns | 1.2× |
+| `bitor`                |  411.51 ns | 15.19 µs | 36.9× |        — |    — |         — |    — |
+| `bitand`               |  408.83 ns | 14.63 µs | 35.8× |        — |    — |         — |    — |
+| `bitxor`               |  411.12 ns | 15.20 µs | 37.0× |        — |    — |         — |    — |
+| `not`                  |  243.82 ns |  1.02 µs |  4.2× |        — |    — |         — |    — |
 
 `first` / `last` are omitted: `bit-set` and `bit-vec` have neither. bit-set has no owned `|` / `&` / `-`; those producing operators are the bitvec `bitor` / `bitand` / `bitxor` / `not` rows. Iterator `union` / `intersection` / `difference` allocate nothing and count yielded indices. `union_with` / `or`, `intersect_with` / `and`, and `difference_with` are in place (`union_from`, `intersect_from`, `difference_from` versus bit-set `*_with` and bit-vec `or` / `and` / `difference`). `bit-vec` `insert` / `remove` shift the vector, so membership writes are `set` / `set_false`. `bit-vec` has no `is_subset` and no set-index iterator.
 
 Slower rows:
 
-| Row                                         |      Ours |    Theirs | Cause                             |
-| ------------------------------------------- | --------: | --------: | --------------------------------- |
-| 1024-bit `iter` vs bitvec                   |   2.47 ns |   2.43 ns | both walk set bits                |
-| 1024-bit `set_false (present)` vs bit-vec   |   3.32 ns |   3.20 ns | clears one set bit                |
-| 65536-bit `remove (absent)` vs bit-set      |   1.94 ns |   1.84 ns | clears one clear bit              |
-| 65536-bit `intersect_with / and` vs bit-vec | 170.35 ns | 164.51 ns | NEON and, plus a changed-bit flag |
+None.
 
 ### Atomic
 
@@ -122,39 +120,44 @@ Slower rows:
 
 | Operation  | bitflagset |  bitvec |      × |
 | ---------- | ---------: | ------: | -----: |
-| `len`      |    0.92 ns | 2.30 ns |   2.5× |
-| `is_empty` |    0.48 ns | 2.51 ns |   5.2× |
-| `contains` |    0.89 ns | 0.73 ns | *0.8×* |
-| `insert`   |    1.30 ns | 1.55 ns |   1.2× |
-| `iter`     |    1.32 ns | 3.03 ns |   2.3× |
+| `len`      |    4.77 ns | 8.45 ns |   1.8× |
+| `is_empty` |    0.82 ns | 8.45 ns |  10.3× |
+| `contains` |    0.82 ns | 0.82 ns |   1.0× |
+| `index`    |    0.82 ns | 0.82 ns | *1.0×* |
+| `insert`   |    2.13 ns | 2.21 ns |   1.0× |
+| `iter`     |    4.77 ns | 8.45 ns |   1.8× |
 
 **1024-bit** (`[AtomicU64; 16]`):
 
-| Operation  | bitflagset |  bitvec |     × |
-| ---------- | ---------: | ------: | ----: |
-| `len`      |    3.45 ns | 4.46 ns |  1.3× |
-| `is_empty` |    0.48 ns | 4.91 ns | 10.2× |
-| `contains` |    0.77 ns | 0.78 ns |  1.0× |
-| `insert`   |    2.37 ns | 2.57 ns |  1.1× |
-| `iter`     |    4.46 ns | 5.91 ns |  1.3× |
+| Operation  | bitflagset |   bitvec |      × |
+| ---------- | ---------: | -------: | -----: |
+| `len`      |   21.56 ns | 32.16 ns |   1.5× |
+| `is_empty` |    0.55 ns | 32.18 ns |  58.5× |
+| `contains` |    0.82 ns |  0.82 ns | *1.0×* |
+| `index`    |    0.82 ns |  0.82 ns | *1.0×* |
+| `insert`   |    2.59 ns |  3.26 ns |   1.3× |
+| `iter`     |   21.56 ns | 32.17 ns |   1.5× |
 
 **65536-bit** (`AtomicBoxedBitSet`):
 
-| Operation  | bitflagset |    bitvec |      × |
-| ---------- | ---------: | --------: | -----: |
-| `len`      |  410.02 ns | 320.48 ns | *0.8×* |
-| `is_empty` |    0.68 ns | 326.20 ns |   480× |
-| `contains` |    0.99 ns |   1.02 ns |   1.0× |
-| `iter`     |  339.09 ns | 357.83 ns |   1.1× |
+| Operation  | bitflagset |    bitvec |     × |
+| ---------- | ---------: | --------: | ----: |
+| `len`      |    1.38 µs |   1.68 µs |  1.2× |
+| `is_empty` |    0.82 ns |   1.69 µs | 2061× |
+| `contains` |    1.09 ns |   1.10 ns |  1.0× |
+| `index`    |    1.09 ns |   1.09 ns |  1.0× |
+| `insert`   |  107.62 ns | 108.39 ns |  1.0× |
+| `iter`     |    1.35 µs |   1.69 µs |  1.3× |
 
-`is_empty` returns on the first non-zero word. Atomic `contains` loads the word with `Relaxed` ordering. The 65536-bit atomic `insert` row is omitted: that bench has no aliased set on `BitVec<AtomicU64>`, so bitvec has no value there.
+`is_empty` returns on the first non-zero word. Atomic `contains` loads the word with `Relaxed` ordering. Atomic `insert`, including the 65536-bit row, builds a fresh set inside the timed closure and sets one bit (`set_aliased` on `BitVec<AtomicU64, Lsb0>`).
 
 Slower rows:
 
-| Row                          |      Ours |    Theirs | Cause                                                           |
-| ---------------------------- | --------: | --------: | --------------------------------------------------------------- |
-| 256-bit `contains` vs bitvec |   0.89 ns |   0.73 ns | BitArray::get(200) reloads that index and takes a bounds branch |
-| 65536-bit `len` vs bitvec    | 410.02 ns | 320.48 ns | relaxed load plus popcount per word                             |
+| Row                           |    Ours |  Theirs | Cause |
+| ----------------------------- | ------: | ------: | ----- |
+| 256-bit `index` vs bitvec     | 0.82 ns | 0.82 ns |       |
+| 1024-bit `contains` vs bitvec | 0.82 ns | 0.82 ns |       |
+| 1024-bit `index` vs bitvec    | 0.82 ns | 0.82 ns |       |
 
 <!-- BENCH_TABLES:END -->
 
